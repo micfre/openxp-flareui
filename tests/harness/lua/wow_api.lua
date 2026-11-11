@@ -155,6 +155,24 @@ local function baseMethods(kind)
       if HARNESS.events[evt] then HARNESS.events[evt][self] = nil end
     end,
     RegisterForClicks = function(self, ...) record(self, "RegisterForClicks", ...) end,
+    RegisterForDrag = function(self, ...) record(self, "RegisterForDrag", ...) end,
+
+    -- Children/regions access. The real API returns these as a vararg; this
+    -- stub returns a table. Skins normalize both (see CallList in the skins).
+    GetChildren = function(self)
+      local out = {}
+      for _, c in ipairs(self.__children) do
+        if c.__kind == "Frame" then out[#out + 1] = c end
+      end
+      return out
+    end,
+    GetRegions = function(self)
+      local out = {}
+      for _, c in ipairs(self.__children) do
+        if c.__kind ~= "Frame" then out[#out + 1] = c end
+      end
+      return out
+    end,
     SetAttribute = function(self, k, v)
       record(self, "SetAttribute", k, v)
       self.__attributes = self.__attributes or {}
@@ -221,6 +239,22 @@ local function newFrame(frameType, name, parent, template)
     f.Enable = function(self) record(self, "Enable") end
   end
 
+  if frameType == "CheckButton" then
+    f.SetChecked = function(self, v)
+      record(self, "SetChecked", v)
+      self.__checked = v and true or false
+    end
+    f.GetChecked = function(self) return self.__checked == true end
+  end
+
+  if frameType == "ScrollFrame" then
+    f.SetScrollChild = function(self, child)
+      record(self, "SetScrollChild", child)
+      self.__scrollChild = child
+    end
+    f.GetScrollChild = function(self) return self.__scrollChild end
+  end
+
   if frameType == "Slider" then
     f.SetMinMaxValues = function(self, lo, hi)
       record(self, "SetMinMaxValues", lo, hi)
@@ -271,6 +305,11 @@ local texExtra = {
   SetVertexColor = function(self, r, g, b, a)
     record(self, "SetVertexColor", r, g, b, a)
     self.__vertexColor = { r, g, b, a }
+  end,
+  GetVertexColor = function(self)
+    local c = self.__vertexColor or self.__colorTexture
+    if not c then return 1, 1, 1, 1 end
+    return c[1], c[2], c[3], c[4] or 1
   end,
   SetGradient = function(self, orientation, top, bottom)
     record(self, "SetGradient", orientation, top, bottom)
@@ -330,6 +369,18 @@ local fsExtra = {
     self.__shadowOffset = { x, y }
   end,
 }
+-- EditBox-only methods (its text/font API mirrors FontString's, which the
+-- EditBox mixin below also installs).
+local ebExtra = {
+  SetAutoFocus = function(self, v) record(self, "SetAutoFocus", v); self.__autoFocus = v end,
+  SetTextInsets = function(self, ...) record(self, "SetTextInsets", ...) end,
+  SetCursorPosition = function(self, pos) record(self, "SetCursorPosition", pos) end,
+  HighlightText = function(self, a, b) record(self, "HighlightText", a, b) end,
+  ClearFocus = function(self) record(self, "ClearFocus"); self.__focused = false end,
+  SetFocus = function(self) record(self, "SetFocus"); self.__focused = true end,
+  HasFocus = function(self) return self.__focused == true end,
+}
+
 -- Mix texture/fontstring methods into every object created by newObject.
 local origNewObject = newObject
 newObject = function(kind, objectType, name, parent)
@@ -337,6 +388,10 @@ newObject = function(kind, objectType, name, parent)
   local extra = kind == "Texture" and texExtra or kind == "FontString" and fsExtra or nil
   if extra then
     for k, v in pairs(extra) do rawset(o, k, v) end
+  end
+  if objectType == "EditBox" then
+    for k, v in pairs(fsExtra) do rawset(o, k, v) end
+    for k, v in pairs(ebExtra) do rawset(o, k, v) end
   end
   return o
 end
