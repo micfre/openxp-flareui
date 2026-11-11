@@ -522,5 +522,80 @@ class SettingsPanel(unittest.TestCase):
                          env.run("return OXPFUI.L.reloadNote"))
 
 
+FLAREUI_EDGE = "Interface\\AddOns\\OXP-FUI\\Media\\Borders\\FlareUI-Frames.tga"
+OPENXP_EDGE = "Interface\\Buttons\\WHITE8X8"
+FRIZQ = "Fonts\\FRIZQT__.TTF"
+
+# The whole Quest Targets family (spec story 11): the frame, its title strip,
+# the section labels and the secure target rows.
+TARGET_ROWS = ("RXPTargetFrame_EnemyButton1", "RXPTargetFrame_EnemyButton2",
+               "RXPTargetFrame_FriendlyButton1")
+
+
+class QuestTargets(unittest.TestCase):
+    """Ticket #5 (stories 11-12): the shipped Quest Targets skin, observed
+    only through the skin seam — boot the real addon files against the fake
+    OpenXP and read frame state back."""
+
+    def test_frame_title_and_rows_get_flareui_look_after_login(self):
+        env = Env()
+        env.boot()
+        # Frame: FlareUI backdrop like the guide card.
+        self.assertEqual(env.run("return RXPTargetFrame.backdrop.edgeFile"), FLAREUI_EDGE)
+        self.assertEqual(env.run("return RXPTargetFrame.backdrop.edgeSize"), 16)
+        self.assertEqual(env.run(
+            "local r,g,b,a = RXPTargetFrame:GetBackdropBorderColor(); return r,g,b,a"),
+            (0.65, 0.49, 0.27, 1.0))
+        self.assertEqual(env.run(
+            "local r,g,b,a = RXPTargetFrame:GetBackdropColor(); return r,g,b,a"),
+            (1.0, 1.0, 1.0, 0.6))
+        # Title: FlareUI header typography, gold, 1px black shadow.
+        self.assertEqual(env.run(
+            "local p,s,f = RXPTargetFrame_title.text:GetFont(); return p,s,f"),
+            (FRIZQ, 13, ""))
+        self.assertEqual(env.run(
+            "local r,g,b,a = RXPTargetFrame_title.text:GetTextColor(); return r,g,b,a"),
+            (1.0, 0.82, 0.0, 1.0))
+        self.assertEqual(env.run(
+            "local x,y = RXPTargetFrame_title.text:GetShadowOffset(); return x,y"), (1, -1))
+        self.assertEqual(env.run(
+            "local r,g,b,a = RXPTargetFrame_title.text:GetShadowColor(); return r,g,b,a"),
+            (0.0, 0.0, 0.0, 1.0))
+        # Key hint ("nearest T"): body text, dim grey.
+        self.assertEqual(env.run(
+            "local p,s,f = RXPTargetFrame_title.keyHint:GetFont(); return p,s,f"),
+            (FRIZQ, 11, ""))
+        self.assertEqual(env.run(
+            "local r,g,b,a = RXPTargetFrame_title.keyHint:GetTextColor(); return r,g,b,a"),
+            (0.55, 0.55, 0.55, 1.0))
+        # Section labels ("KILL" / "TALK TO"): FlareUI zone bronze, title size.
+        for key in ("enemy", "friendly"):
+            self.assertEqual(env.run(
+                f"local p,s,f = RXPTargetFrame.sections[{key!r}]:GetFont(); return p,s,f"),
+                (FRIZQ, 12, ""), f"section {key} font")
+            self.assertEqual(env.run(
+                f"local r,g,b,a = RXPTargetFrame.sections[{key!r}]:GetTextColor(); return r,g,b,a"),
+                (0.80, 0.60, 0.34, 1.0), f"section {key} colour")
+        # Rows: name in light grey body text, keybind hint dim, bronze strip.
+        for row in TARGET_ROWS:
+            self.assertEqual(env.run(
+                f"local p,s,f = _G[{row!r}].label:GetFont(); return p,s,f"),
+                (FRIZQ, 11, ""), f"{row} label font")
+            self.assertEqual(env.run(
+                f"local r,g,b,a = _G[{row!r}].label:GetTextColor(); return r,g,b,a"),
+                (0.85, 0.85, 0.85, 1.0), f"{row} label colour")
+            self.assertEqual(env.run(
+                f"local p,s,f = _G[{row!r}].key:GetFont(); return p,s,f"),
+                (FRIZQ, 11, ""), f"{row} key font")
+            self.assertEqual(env.run(
+                f"local r,g,b,a = _G[{row!r}].key:GetTextColor(); return r,g,b,a"),
+                (0.55, 0.55, 0.55, 1.0), f"{row} key colour")
+            self.assertEqual(env.run(
+                f"local c = _G[{row!r}].bar.__colorTexture; return c[1],c[2],c[3],c[4]"),
+                (0.80, 0.60, 0.34, 1.0), f"{row} class strip not bronze")
+        # Quiet: no chat output from any of this.
+        self.assertEqual(env.chat(), [])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -10,4 +10,5 @@ Core.lua
 Locale.lua
 Theme.lua
 Engine.lua
+SkinTargets.lua
 SettingsPanel.lua
