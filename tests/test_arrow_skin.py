@@ -210,5 +210,68 @@ class ArrowRefreshReapply(unittest.TestCase):
             AMBER + (0.6,))
 
 
+class ArrowSwitches(unittest.TestCase):
+    """Stories 24-25: master and per-window switches leave the arrow with
+    OpenXP's own look — including after refresh calls and per-frame ticks."""
+
+    OXP_BLUE_RING = (90 / 255, 184 / 255, 1.0, 0.6)
+
+    def assert_openxp_look(self, env):
+        # Everything the skin would have changed keeps OpenXP's values.
+        self.assertEqual(env.run(
+            "local r,g,b,a = RXPG_ARROW.dialRing:GetVertexColor(); return r,g,b,a"),
+            self.OXP_BLUE_RING)
+        self.assertEqual(env.run("return RXPG_ARROW.texture:GetDesaturated()"), False)
+        self.assertEqual(env.run(
+            "local r,g,b,a = RXPG_ARROW.dialBg:GetVertexColor(); return r,g,b,a"),
+            (16 / 255, 17 / 255, 21 / 255, 0.85))
+        self.assertEqual(env.run(
+            "local p,s,f = RXPG_ARROW.oxpDist:GetFont(); return p,s,f"),
+            ("Fonts\\ARIALN.TTF", 17, "OUTLINE"))
+
+    def test_arrow_window_switch_off_leaves_arrow_untouched(self):
+        env = Env(db={"windows": {"arrow": False}})
+        env.boot()
+        env.run("HARNESS.openxp:RenderFrame()")
+        env.run("HARNESS.openxp.card.ApplyFonts()")
+        env.run("RXPG_ARROW.distance = 100")
+        env.run("HARNESS.ArrowTick()")
+        self.assert_openxp_look(env)
+        self.assertEqual(env.chat(), [])
+
+    def test_arrow_window_switched_off_mid_session_stops_reasserting(self):
+        env = Env()
+        env.boot()
+        env.run("RXPG_ARROW.distance = 100")
+        env.run("HARNESS.ArrowTick()")
+        self.assertEqual(env.run(
+            "local r,g,b,a = RXPG_ARROW.dialRing:GetVertexColor(); return r,g,b,a"),
+            AMBER + (0.6,))
+        # The settings panel flips the switch; the engine's next pass skips
+        # the skin, and the chained per-frame re-assert goes quiet — OpenXP's
+        # own repaint wins again from the next tick on.
+        env.run("OXPFUIDB.windows['arrow'] = false")
+        env.run("OXPFUI.Reapply('settings change')")
+        env.chat()  # drain
+        env.run("HARNESS.ArrowTick()")
+        self.assertEqual(env.run(
+            "local r,g,b,a = RXPG_ARROW.dialRing:GetVertexColor(); return r,g,b,a"),
+            self.OXP_BLUE_RING)
+        env.slash("/oxpfui debug")
+        self.assertIn("window 'arrow' is switched off", "\n".join(env.chat()))
+
+    def test_master_switch_off_leaves_arrow_untouched(self):
+        env = Env(db={"enabled": False})
+        env.boot()
+        env.run("HARNESS.openxp:RenderFrame()")
+        env.run("HARNESS.openxp.SetupArrow()")
+        env.run("RXPG_ARROW.distance = 100")
+        env.run("HARNESS.ArrowTick()")
+        self.assert_openxp_look(env)
+        # OpenXP's own OnUpdate handler runs un-chained.
+        self.assertGreaterEqual(env.openxp_calls("ArrowUpdate"), 1)
+        self.assertEqual(env.chat(), [])
+
+
 if __name__ == "__main__":
     unittest.main()
