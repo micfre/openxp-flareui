@@ -277,7 +277,7 @@ local function Apply(ctx)
   if not ok then children = nil end
   local header, bar, upNext, mini, list
   for _, child in ipairs(children or {}) do
-    if fields(child, "zone", "step", "dot") then header = child
+    if fields(child, "step", "dot") then header = child
     elseif fields(child, "prev", "collapse") then bar = child
     elseif fields(child, "label", "lines", "sep") then upNext = child
     elseif fields(child, "expand", "count") then mini = child

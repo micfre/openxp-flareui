@@ -371,5 +371,111 @@ class HeaderBand(unittest.TestCase):
             env.run("return HARNESS.cardBits.header.stepBtn.oxpfuiBox == nil"), True)
 
 
+class CardSwitches(unittest.TestCase):
+    """Story 24/25: the master switch and the card's per-window switch."""
+
+    def test_card_window_switch_off_leaves_the_card_openxp_looking(self):
+        env = Env(db={"windows": {"card": False}})
+        env.boot()
+        env.run("HARNESS.openxp.card.Refresh(nil, true)")
+        self.assertEqual(env.run("return OpenXPCard.backdrop.edgeFile"), OXP_EDGE)
+        self.assertEqual(color_of(env, "HARNESS.cardBits.header.zone"),
+                         (0.92, 0.93, 0.95, 1.0))  # OpenXP text white
+        self.assertEqual(env.run("return OpenXPCard.oxpfuiDivider == nil"), True)
+        self.assertEqual(env.run(
+            "return HARNESS.cardBits.bar.prev.oxpfuiBox == nil"), True)
+
+    def test_master_switch_off_leaves_the_card_untouched(self):
+        env = Env(db={"enabled": False})
+        env.boot()
+        for call in ("HARNESS.openxp:RenderFrame()",
+                     "HARNESS.openxp.card.Refresh(nil, true)",
+                     "HARNESS.openxp.card.ApplyFonts()",
+                     "HARNESS.openxp.card.SkinPanels()"):
+            env.run(call)
+        self.assertEqual(env.run("return OpenXPCard.backdrop.edgeFile"), OXP_EDGE)
+        self.assertEqual(color_of(env, "HARNESS.cardBits.header.zone"),
+                         (0.92, 0.93, 0.95, 1.0))
+        # opening the step list while disabled stays OpenXP-styled
+        env.run("HARNESS.openxp.card.ToggleStepList()")
+        self.assertEqual(env.run("return HARNESS.cardBits.list.backdrop.edgeFile"),
+                         OXP_EDGE)
+
+    def test_live_setting_changes_reapply_to_the_card(self):
+        env = Env()
+        env.install_skins("")  # (no extra skins needed; the real card skin)
+        env.boot()
+        env.slash("/oxpfui")
+        env.run("OXPFUIPanel.opacitySlider:SetValue(0.2)")
+        self.assertEqual(env.run(
+            "local _,_,_,a = OpenXPCard:GetBackdropColor(); return a"), 0.2)
+        env.run("OXPFUIPanel.borderBtn:Click()")  # Frames -> Thick
+        self.assertEqual(env.run("return OpenXPCard.backdrop.edgeFile"), FLARE_THICK)
+
+
+class CardNeverMovesAnything(unittest.TestCase):
+    """Story 29: no OpenXP frame is ever moved or resized by the skin."""
+
+    def test_card_frame_never_gets_layout_calls(self):
+        env = Env()
+        env.boot()
+        env.run("HARNESS.openxp:RenderFrame()")
+        env.run("HARNESS.openxp.card.Refresh(nil, true)")
+        env.run("HARNESS.openxp.card.ApplyFonts()")
+        env.run("HARNESS.openxp.card.ToggleStepList()")
+        for method in ("SetPoint", "SetSize", "SetWidth", "SetHeight",
+                       "SetScale", "ClearAllPoints", "SetAllPoints"):
+            self.assertEqual(env.calls_made_on("OpenXPCard", method), 0,
+                             f"OpenXPCard:{method} was called")
+
+    def test_card_children_keep_their_geometry_through_reapplies(self):
+        env = Env()
+        env.boot()
+        env.run("HARNESS.openxp.card.ToggleStepList()")
+        header_calls = env.run("return #HARNESS.cardBits.header.__calls")
+        list_layout = {m: env.run(
+            "local n=0; for _,c in ipairs(HARNESS.cardBits.list.__calls) do "
+            f"if c[1]=={m!r} then n=n+1 end end; return n")
+            for m in ("SetPoint", "SetSize", "SetHeight", "SetWidth", "SetScale")}
+        env.run("HARNESS.openxp.card.Refresh(nil, true)")
+        env.run("OXPFUI.Reapply('test')")
+        env.run("OXPFUI.Reapply('test')")
+        # OpenXP's own ToggleStepList laid the list out once; re-applies
+        # added nothing, and the header was never touched at all.
+        self.assertLessEqual(env.run("return #HARNESS.cardBits.header.__calls"),
+                             header_calls)
+        for m, n in list_layout.items():
+            self.assertEqual(env.run(
+                "local n=0; for _,c in ipairs(HARNESS.cardBits.list.__calls) do "
+                f"if c[1]=={m!r} then n=n+1 end end; return n"), n,
+                f"step list {m} changed by a re-apply")
+
+
+class CardRobustness(unittest.TestCase):
+    """Story 31: a changed OpenXP (missing frames/fields) is skipped
+    quietly — no errors, no chat spam, the rest of the skin still applies."""
+
+    def test_missing_card_bits_are_skipped_quietly(self):
+        env = Env(load_addon=False)
+        env.run("HARNESS.openxp.card.hist = nil")
+        env.run("HARNESS.openxp.card.blocksForTest = nil")
+        env.run("HARNESS.openxp.card.xpStrip = nil")
+        env.run("HARNESS.openxp.card.STATUS = nil")
+        env.run("HARNESS.openxp.card.StepStatus = nil")
+        env.run("HARNESS.cardBits.header.zone = nil")      # header lost its zone
+        env.run("HARNESS.cardBits.bar.prev = nil")         # a button vanished
+        env.load_addon()
+        env.boot()
+        env.run("HARNESS.openxp.card.Refresh(nil, true)")
+        self.assertEqual(env.chat(), [])
+        env.slash("/oxpfui debug")
+        report = "\n".join(env.chat())
+        self.assertIn("Errors: none", report)
+        # the card frame itself is still skinned
+        self.assertEqual(env.run("return OpenXPCard.backdrop.edgeFile"), FLARE_FRAMES)
+        self.assertEqual(color_of(env, "HARNESS.cardBits.header.step"), GOLD)
+        self.assertNotEqual(env.run("return OpenXPCard.oxpfuiDivider == nil"), True)
+
+
 if __name__ == "__main__":
     unittest.main()
