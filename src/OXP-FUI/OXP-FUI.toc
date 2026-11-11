@@ -13,5 +13,6 @@ Engine.lua
 ArrowSkin.lua
 Card.lua
 SkinTargets.lua
+SkinTracker.lua
 WelcomeFeedback.lua
 SettingsPanel.lua

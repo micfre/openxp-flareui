@@ -470,6 +470,88 @@ local splits = CreateFrame("Frame", "RXPLevelSplits", UIParent, "BackdropTemplat
 local splitsTitle = CreateFrame("Frame", "RXPLevelSplits_title", splits)
 splitsTitle.text = splitsTitle:CreateFontString(nil, "OVERLAY")
 splits.title = splitsTitle
+-- Level splits children (LevelingTracker.lua 1030-1095): the cogwheel
+-- button (rxp_cog-32 normal texture, half over the title's left edge), the
+-- hidden dropdown menu, and the three AceGUI Label widgets
+-- (history/current/total) whose font string is .label and whose SetFont
+-- forwards to it.
+local cog = CreateFrame("Button", "$parentCogwheel", splitsTitle)
+splitsTitle.cog = cog
+local cogTex = cog:CreateTexture(nil, "ARTWORK")
+cogTex:SetTexture("Interface\\AddOns\\OpenXP\\Textures\\Minimal\\rxp_cog-32")
+cog:SetNormalTexture(cogTex)
+cog:SetScript("OnClick", function() bump("RXPLevelSplits_titleCogwheel click") end)
+splitsTitle.splitsMenuFrame =
+  CreateFrame("Frame", "RXPG_SplitsMenuFrame", splitsTitle, "UIDropDownMenuTemplate")
+
+local function aceLabel(parent)
+  -- AceGUI-3.0 Label: widget table with .frame and the .label font string
+  -- (SetFont on the widget re-fonts the font string, AceGUIWidget-Label).
+  local w = {}
+  w.frame = CreateFrame("Frame", nil, parent)
+  w.label = w.frame:CreateFontString(nil, "OVERLAY")
+  w.SetFont = function(_, font, size, flags) w.label:SetFont(font, size, flags) end
+  w.SetText = function(_, text) w.label:SetText(text) end
+  return w
+end
+splits.history = aceLabel(splits)
+splits.current = aceLabel(splits)
+splits.total = aceLabel(splits)
+-- UpdateLevelSplits content (LevelingTracker.lua 1242-1316).
+splits.history:SetText("Level 40  4:41\nLevel 39  5:02")
+splits.current:SetText("Level 41  12:07 (est 18:40)")
+splits.total:SetText("Total  3:24:55")
+
+-- The leveling tracker proper (the report panel): AceGUI widgets attached
+-- to Blizzard frames and keyed by attachment name in addon.tracker.ui
+-- (LevelingTracker.lua 420-633). The AceGUI frame container is unnamed;
+-- the level button's frame carries an AceGUI30Button<N> name.
+local reports = {}
+local report = {}
+report.frame = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
+report.titletext = report.frame:CreateFontString(nil, "OVERLAY")
+report.levelButton = {}
+report.levelButton.frame = CreateFrame("Button", "AceGUI30Button1", UIParent)
+report.levelButton.text = report.levelButton.frame:CreateFontString(nil, "OVERLAY")
+report.levelMenuFrame = CreateFrame("Frame", "RXPG_LevelMenuFrame",
+  report.levelButton.frame, "UIDropDownMenuTemplate")
+
+local function headingWidget(parent)
+  -- AceGUI Heading (AceGUIWidget-Heading): centered text between two
+  -- UI-Tooltip-Border divider textures.
+  local h = {}
+  h.frame = CreateFrame("Frame", nil, parent)
+  h.label = h.frame:CreateFontString(nil, "BACKGROUND")
+  h.left = h.frame:CreateTexture(nil, "BACKGROUND")
+  h.right = h.frame:CreateTexture(nil, "BACKGROUND")
+  h.left:SetTexture(137057) -- Interface\Tooltips\UI-Tooltip-Border
+  h.right:SetTexture(137057)
+  return h
+end
+
+local function dataLabel(parent)
+  return aceLabel(parent)
+end
+
+report.target = dataLabel(report.frame)
+for _, key in ipairs({ "reachedContainer", "speedContainer", "zonesContainer",
+                       "extrasContainer" }) do
+  local c = { label = headingWidget(report.frame), data = dataLabel(report.frame) }
+  report[key] = c
+end
+-- sourcesContainer.data and teamworkContainer.data are maps of labels
+-- ({quests,mobs} and {solo,group}, LevelingTracker.lua 566-614).
+report.sourcesContainer = {
+  label = headingWidget(report.frame),
+  data = { quests = dataLabel(report.frame), mobs = dataLabel(report.frame) },
+}
+report.teamworkContainer = {
+  label = headingWidget(report.frame),
+  data = { solo = dataLabel(report.frame), group = dataLabel(report.frame) },
+}
+reports.CharacterFrame = report
+-- OpenXP aliases the (unnamed) AceGUI frame under this global for Escape.
+_G["RESTEDXP_TRACKER_SUMMARY_WINDOW"] = report.frame
 
 -- Welcome / what's-new + feedback windows (phase 2) ---------------------------
 -- Mirrors WelcomeFrame.lua:799-989 and Feedback.lua:185-268: created lazily on
@@ -698,7 +780,8 @@ function ResetFeedback()
 end
 
 -- EXCLUDED frames (must never be touched by OXP-FUI) ------------------------
-local rxpFrame = CreateFrame("Frame", "RXPFrame", UIParent, "BackdropTemplate")CreateFrame("Frame", "RXPFrame_bottomFrame", rxpFrame)
+local rxpFrame = CreateFrame("Frame", "RXPFrame", UIParent, "BackdropTemplate")
+CreateFrame("Frame", "RXPFrame_bottomFrame", rxpFrame)
 CreateFrame("Frame", "RXPFrameGuideName", rxpFrame)
 CreateFrame("Frame", "RXPG_MenuFrame", UIParent, "UIDropDownMenuTemplate")
 CreateFrame("Frame", "RXP_MMMenuFrame", UIParent, "UIDropDownMenuTemplate")
@@ -852,6 +935,89 @@ function HARNESS.ApplyTargetsOpenXPLook()
   end
 end
 
+-- The level-splits family reset to OpenXP's own look (LevelingTracker.lua
+-- 985-1095, 1030-1070, 1310-1340: RXPFrame edge backdrop, theme text
+-- colour, Arial Narrow at levelSplitsFontSize). Nil-safe so tests can
+-- simulate frames going missing.
+function HARNESS.ApplySplitsOpenXPLook()
+  local f = N("RXPLevelSplits")
+  if not f then return end
+  applyOpenXPLook(f)
+  local title = f.title
+  if title then
+    applyOpenXPLook(title)
+    if title.text then
+      title.text:SetFont("Fonts\\ARIALN.TTF", 9, "")
+      title.text:SetTextColor(0.92, 0.93, 0.95, 1)
+      title.text:SetShadowOffset(0, 0)
+    end
+    local cog = title.cog
+    if cog and cog.GetNormalTexture then
+      local tex = cog:GetNormalTexture()
+      if type(tex) == "table" and tex.SetVertexColor then
+        tex:SetVertexColor(1, 1, 1, 1)
+      end
+    end
+  end
+  for _, key in ipairs({ "history", "current", "total" }) do
+    local w = f[key]
+    if type(w) == "table" and w.label and w.label.SetFont then
+      w.label:SetFont("Fonts\\ARIALN.TTF", 11, "")
+      w.label:SetTextColor(0.92, 0.93, 0.95, 1)
+      w.label:SetShadowOffset(0, 0)
+    end
+  end
+end
+
+-- The leveling report panel reset to OpenXP's own look
+-- (LevelingTracker.lua 448-449, 523-633: RXPFrame edge backdrop, Arial
+-- Narrow 12 labels, untinted heading divider art).
+function HARNESS.ApplyReportOpenXPLook()
+  -- Read through the addon table once it exists, so tests that remove or
+  -- drift the report entries see the same thing OpenXP would.
+  local ui = (HARNESS.openxp and HARNESS.openxp.tracker
+    and HARNESS.openxp.tracker.ui) or reports
+  if type(ui) ~= "table" then return end
+  local function labelOpenXPLook(w)
+    -- Works for a Label widget (.label font string) or a bare font string.
+    local fs = type(w) == "table" and (w.label or w) or nil
+    if type(fs) == "table" and fs.SetFont then
+      fs:SetFont("Fonts\\ARIALN.TTF", 12, "")
+      fs:SetTextColor(0.92, 0.93, 0.95, 1)
+      fs:SetShadowOffset(0, 0)
+    end
+  end
+  local function containerOpenXPLook(c)
+    if type(c) ~= "table" then return end
+    local h = c.label
+    if type(h) == "table" then
+      labelOpenXPLook(h)
+      for _, side in ipairs({ "left", "right" }) do
+        local tex = h[side]
+        if type(tex) == "table" and tex.SetVertexColor then
+          tex:SetVertexColor(1, 1, 1, 1)
+        end
+      end
+    end
+    if type(c.data) == "table" then
+      labelOpenXPLook(c.data)
+      for _, w in pairs(c.data) do labelOpenXPLook(w) end
+    end
+  end
+  for _, trackerUi in pairs(ui) do
+    if type(trackerUi) == "table" then
+      applyOpenXPLook(trackerUi.frame, trackerUi.titletext)
+      local lb = trackerUi.levelButton
+      if type(lb) == "table" and lb.text then labelOpenXPLook(lb.text) end
+      labelOpenXPLook(trackerUi.target)
+      for _, key in ipairs({ "reachedContainer", "speedContainer", "zonesContainer",
+                             "sourcesContainer", "teamworkContainer", "extrasContainer" }) do
+        containerOpenXPLook(trackerUi[key])
+      end
+    end
+  end
+end
+
 function HARNESS.ApplyOpenXPLook()
   applyCardOpenXPLook()
   -- Like OpenXP's own code (addon.arrowFrame), not a _G lookup: a test may
@@ -860,8 +1026,10 @@ function HARNESS.ApplyOpenXPLook()
   -- The dial/text repaint card.ArrowUpdate does (once the card styled it).
   ArrowPaintOpenXP()
   HARNESS.ApplyTargetsOpenXPLook()
-  applyOpenXPLook(N("RXPItemFrame"), N("RXPItemFrame_title").text)
-  applyOpenXPLook(N("RXPLevelSplits"), N("RXPLevelSplits_title").text)
+  local itemFrame = N("RXPItemFrame")
+  applyOpenXPLook(itemFrame, itemFrame and itemFrame.title and itemFrame.title.text or nil)
+  HARNESS.ApplySplitsOpenXPLook()
+  HARNESS.ApplyReportOpenXPLook()
   ResetWelcome()
   ResetFeedback()
 end
@@ -951,8 +1119,11 @@ addon.targeting = {
 }
 addon.tracker = {
   levelSplits = splits,
+  ui = reports,
   UpdateLevelSplits = function() bump("tracker.UpdateLevelSplits"); HARNESS.ApplyOpenXPLook() end,
-  CreateLevelSplits = function() bump("tracker.CreateLevelSplits") end,
+  -- A rebuild recreates the frame family with OpenXP's own look
+  -- (CreateLevelSplits early-outs to UpdateLevelSplits when it exists).
+  CreateLevelSplits = function() bump("tracker.CreateLevelSplits"); HARNESS.ApplyOpenXPLook() end,
 }
 addon.activeItemFrame = itemFrame
 addon.activeItemFrame.UpdateVisuals = function() bump("activeItemFrame.UpdateVisuals")

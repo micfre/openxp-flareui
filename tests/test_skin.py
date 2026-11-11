@@ -530,6 +530,14 @@ FLAREUI_EDGE = "Interface\\AddOns\\OXP-FUI\\Media\\Borders\\FlareUI-Frames.tga"
 OPENXP_EDGE = "Interface\\Buttons\\WHITE8X8"
 FRIZQ = "Fonts\\FRIZQT__.TTF"
 
+
+def _layout_count_lua(frame_expr: str, method: str) -> str:
+    """Lua snippet: count one layout method's recorded calls on a frame
+    reached by expression (for frames without a global name)."""
+    return (f"local n = 0; local f = {frame_expr}; "
+            f"if f then for _, c in ipairs(f.__calls) do "
+            f"if c[1] == {method!r} then n = n + 1 end end end; return n")
+
 # The whole Quest Targets family (spec story 11): the frame, its title strip,
 # the section labels and the secure target rows.
 TARGET_ROWS = ("RXPTargetFrame_EnemyButton1", "RXPTargetFrame_EnemyButton2",
@@ -791,6 +799,351 @@ class QuestTargets(unittest.TestCase):
         for (f, m), count in before.items():
             self.assertEqual(env.calls_made_on(f, m), count,
                              f"{f}:{m} was called by the skin")
+
+
+class TrackerSplits(unittest.TestCase):
+    """Ticket #7 (story 15): the shipped leveling-tracker skin, observed
+    only through the skin seam. Two windows: the level-splits frame (global
+    RXPLevelSplits family) and the leveling report panel (AceGUI widgets
+    reached through OpenXP's addon table)."""
+
+    # -- the FlareUI look after login ---------------------------------------
+
+    def test_splits_frame_and_title_get_flareui_look_after_login(self):
+        env = Env()
+        env.boot()
+        # Frame: bronze border (border-style setting), warm dark fill
+        # (opacity setting).
+        self.assertEqual(env.run("return RXPLevelSplits.backdrop.edgeFile"), FLAREUI_EDGE)
+        self.assertEqual(env.run("return RXPLevelSplits.backdrop.edgeSize"), 16)
+        self.assertEqual(env.run(
+            "local r,g,b,a = RXPLevelSplits:GetBackdropBorderColor(); return r,g,b,a"),
+            (0.65, 0.49, 0.27, 1.0))
+        self.assertEqual(env.run(
+            "local r,g,b,a = RXPLevelSplits:GetBackdropColor(); return r,g,b,a"),
+            (1.0, 1.0, 1.0, 0.6))
+        # Title strip: same backdrop, "Level splits" in gold header
+        # typography with the 1px black shadow of the selected font.
+        self.assertEqual(env.run("return RXPLevelSplits_title.backdrop.edgeFile"), FLAREUI_EDGE)
+        self.assertEqual(env.run(
+            "local p,s,f = RXPLevelSplits_title.text:GetFont(); return p,s,f"),
+            (FRIZQ, 13, ""))
+        self.assertEqual(env.run(
+            "local r,g,b,a = RXPLevelSplits_title.text:GetTextColor(); return r,g,b,a"),
+            (1.0, 0.82, 0.0, 1.0))
+        self.assertEqual(env.run(
+            "local x,y = RXPLevelSplits_title.text:GetShadowOffset(); return x,y"), (1, -1))
+        self.assertEqual(env.run(
+            "local r,g,b,a = RXPLevelSplits_title.text:GetShadowColor(); return r,g,b,a"),
+            (0.0, 0.0, 0.0, 1.0))
+        # Quiet: no chat output.
+        self.assertEqual(env.chat(), [])
+
+    def test_splits_labels_and_cogwheel_get_flareui_palette(self):
+        env = Env()
+        env.boot()
+        # The XP/level splits text: FlareUI typography at body size, palette
+        # by meaning — past splits finished grey, the current split light
+        # blue, the total light grey.
+        expected = {
+            "history": (0.55, 0.55, 0.55, 1.0),
+            "current": (0.40, 0.80, 1.0, 1.0),
+            "total": (0.85, 0.85, 0.85, 1.0),
+        }
+        for key, colour in expected.items():
+            self.assertEqual(env.run(
+                f"local p,s,f = RXPLevelSplits[{key!r}].label:GetFont(); return p,s,f"),
+                (FRIZQ, 11, ""), f"{key} font")
+            self.assertEqual(env.run(
+                f"local r,g,b,a = RXPLevelSplits[{key!r}].label:GetTextColor(); return r,g,b,a"),
+                colour, f"{key} colour")
+            self.assertEqual(env.run(
+                f"local x,y = RXPLevelSplits[{key!r}].label:GetShadowOffset(); return x,y"),
+                (1, -1), f"{key} shadow")
+        # The cogwheel icon on the title strip is tinted FlareUI bronze.
+        self.assertEqual(env.run(
+            "local t = RXPLevelSplits_titleCogwheel:GetNormalTexture();"
+            "local c = t.__vertexColor; return c[1],c[2],c[3],c[4]"),
+            (0.80, 0.60, 0.34, 1.0))
+        # Its art is still OpenXP's own cog.
+        self.assertEqual(env.run(
+            "return (RXPLevelSplits_titleCogwheel:GetNormalTexture():GetTexture())"),
+            "Interface\\AddOns\\OpenXP\\Textures\\Minimal\\rxp_cog-32")
+        self.assertEqual(env.chat(), [])
+
+    def test_report_panel_gets_flareui_look_after_login(self):
+        env = Env()
+        env.boot()
+        panel = "HARNESS.openxp.tracker.ui['CharacterFrame']"
+        # Window frame: bronze border, warm dark fill (the AceGUI frame is
+        # unnamed; the skin reaches it through OpenXP's addon table).
+        self.assertEqual(env.run(f"return {panel}.frame.backdrop.edgeFile"), FLAREUI_EDGE)
+        self.assertEqual(env.run(f"return {panel}.frame.backdrop.edgeSize"), 16)
+        self.assertEqual(env.run(
+            f"local r,g,b,a = {panel}.frame:GetBackdropBorderColor(); return r,g,b,a"),
+            (0.65, 0.49, 0.27, 1.0))
+        self.assertEqual(env.run(
+            f"local r,g,b,a = {panel}.frame:GetBackdropColor(); return r,g,b,a"),
+            (1.0, 1.0, 1.0, 0.6))
+        # Window title: gold header typography with the 1px shadow.
+        self.assertEqual(env.run(
+            f"local p,s,f = {panel}.titletext:GetFont(); return p,s,f"),
+            (FRIZQ, 13, ""))
+        self.assertEqual(env.run(
+            f"local r,g,b,a = {panel}.titletext:GetTextColor(); return r,g,b,a"),
+            (1.0, 0.82, 0.0, 1.0))
+        self.assertEqual(env.run(
+            f"local x,y = {panel}.titletext:GetShadowOffset(); return x,y"), (1, -1))
+        # The level-range button text ("41 to 42"): gold XP/level headline.
+        self.assertEqual(env.run(
+            f"local p,s,f = {panel}.levelButton.text:GetFont(); return p,s,f"),
+            (FRIZQ, 12, ""))
+        self.assertEqual(env.run(
+            f"local r,g,b,a = {panel}.levelButton.text:GetTextColor(); return r,g,b,a"),
+            (1.0, 0.82, 0.0, 1.0))
+        # Section headings: FlareUI zone bronze at title size, their divider
+        # art tinted bronze; data labels: light grey body text.
+        headings = ("reachedContainer", "speedContainer", "zonesContainer",
+                    "sourcesContainer", "teamworkContainer", "extrasContainer")
+        for key in headings:
+            self.assertEqual(env.run(
+                f"local p,s,f = {panel}[{key!r}].label.label:GetFont(); return p,s,f"),
+                (FRIZQ, 12, ""), f"{key} heading font")
+            self.assertEqual(env.run(
+                f"local r,g,b,a = {panel}[{key!r}].label.label:GetTextColor(); return r,g,b,a"),
+                (0.80, 0.60, 0.34, 1.0), f"{key} heading colour")
+            for side in ("left", "right"):
+                self.assertEqual(env.run(
+                    f"local t = {panel}[{key!r}].label[{side!r}];"
+                    "local c = t.__vertexColor; return c[1],c[2],c[3],c[4]"),
+                    (0.80, 0.60, 0.34, 1.0), f"{key} {side} divider tint")
+        for key in ("reachedContainer", "speedContainer", "zonesContainer",
+                    "extrasContainer"):
+            self.assertEqual(env.run(
+                f"local p,s,f = {panel}[{key!r}].data.label:GetFont(); return p,s,f"),
+                (FRIZQ, 11, ""), f"{key} data font")
+            self.assertEqual(env.run(
+                f"local r,g,b,a = {panel}[{key!r}].data.label:GetTextColor(); return r,g,b,a"),
+                (0.85, 0.85, 0.85, 1.0), f"{key} data colour")
+        for key, subkeys in (("sourcesContainer", ("quests", "mobs")),
+                             ("teamworkContainer", ("solo", "group"))):
+            for sub in subkeys:
+                self.assertEqual(env.run(
+                    f"local p,s,f = {panel}[{key!r}].data[{sub!r}].label:GetFont(); return p,s,f"),
+                    (FRIZQ, 11, ""), f"{key}.{sub} data font")
+                self.assertEqual(env.run(
+                    f"local r,g,b,a = {panel}[{key!r}].data[{sub!r}].label:GetTextColor(); return r,g,b,a"),
+                    (0.85, 0.85, 0.85, 1.0), f"{key}.{sub} data colour")
+        # The player-name headline: light grey body text.
+        self.assertEqual(env.run(
+            f"local r,g,b,a = {panel}.target.label:GetTextColor(); return r,g,b,a"),
+            (0.85, 0.85, 0.85, 1.0))
+        self.assertEqual(env.chat(), [])
+
+    # -- helpers -----------------------------------------------------------
+
+    PANEL = "HARNESS.openxp.tracker.ui['CharacterFrame']"
+
+    def assert_flareui_look(self, env):
+        """The visible identity of the skin: splits frame + title + the
+        current split, and the report window + title + one heading."""
+        self.assertEqual(env.run("return RXPLevelSplits.backdrop.edgeFile"), FLAREUI_EDGE)
+        self.assertEqual(env.run(
+            "local p,s,f = RXPLevelSplits_title.text:GetFont(); return p,s,f"),
+            (FRIZQ, 13, ""))
+        self.assertEqual(env.run(
+            "local r,g,b,a = RXPLevelSplits.current.label:GetTextColor(); return r,g,b,a"),
+            (0.40, 0.80, 1.0, 1.0))
+        panel = self.PANEL
+        self.assertEqual(env.run(f"return {panel}.frame.backdrop.edgeFile"), FLAREUI_EDGE)
+        self.assertEqual(env.run(
+            f"local r,g,b,a = {panel}.titletext:GetTextColor(); return r,g,b,a"),
+            (1.0, 0.82, 0.0, 1.0))
+        self.assertEqual(env.run(
+            f"local c = {panel}.speedContainer.label.left.__vertexColor;"
+            "return c[1],c[2],c[3]"), (0.80, 0.60, 0.34))
+
+    def assert_openxp_look(self, env):
+        """OpenXP's own look kept (nothing skinned)."""
+        self.assertEqual(env.run("return RXPLevelSplits.backdrop.edgeFile"), OPENXP_EDGE)
+        self.assertEqual(env.run(
+            "local p,s,f = RXPLevelSplits_title.text:GetFont(); return p,s,f"),
+            ("Fonts\\ARIALN.TTF", 9, ""))
+        self.assertEqual(env.run(
+            "local r,g,b,a = RXPLevelSplits.current.label:GetTextColor(); return r,g,b,a"),
+            (0.92, 0.93, 0.95, 1.0))
+        panel = self.PANEL
+        self.assertEqual(env.run(f"return {panel}.frame.backdrop.edgeFile"), OPENXP_EDGE)
+        self.assertEqual(env.run(
+            f"local r,g,b,a = {panel}.titletext:GetTextColor(); return r,g,b,a"),
+            (90 / 255, 184 / 255, 1.0, 1.0))
+
+    # -- re-apply after OpenXP refreshes (stories 22-23) --------------------
+
+    def test_skin_wins_after_every_openxp_refresh_of_the_tracker(self):
+        refreshes = [
+            "HARNESS.openxp:RenderFrame()",
+            "HARNESS.openxp:ReloadTheme()",
+            "HARNESS.openxp.card.Refresh(nil, true)",
+            "HARNESS.openxp.card.SkinPanels()",
+            "HARNESS.openxp.card:SkinPanel(_G.RXPLevelSplits)",
+            "HARNESS.openxp.card.ApplyFonts()",
+            "HARNESS.openxp.tracker:UpdateLevelSplits()",
+            "HARNESS.openxp.tracker:CreateLevelSplits()",
+        ]
+        for call in refreshes:
+            with self.subTest(call=call):
+                env = Env()
+                env.boot()
+                self.assert_flareui_look(env)
+                env.run(call)
+                self.assert_flareui_look(env)
+                self.assertEqual(env.chat(), [])
+
+    # -- switches (stories 24-25) -------------------------------------------
+
+    def test_per_window_switch_off_leaves_both_windows_untouched(self):
+        env = Env(db={"windows": {"tracker": False}})
+        env.boot()
+        env.run("HARNESS.openxp:RenderFrame()")
+        env.run("HARNESS.openxp.tracker:UpdateLevelSplits()")
+        self.assert_openxp_look(env)
+        env.slash("/oxpfui debug")
+        self.assertIn("window 'tracker' is switched off", "\n".join(env.chat()))
+
+    def test_master_switch_off_leaves_both_windows_untouched(self):
+        env = Env(db={"enabled": False})
+        env.boot()
+        env.run("HARNESS.openxp:RenderFrame()")
+        env.run("HARNESS.openxp:ReloadTheme()")
+        env.run("HARNESS.openxp.tracker:UpdateLevelSplits()")
+        self.assert_openxp_look(env)
+        self.assertEqual(env.chat(), [])
+
+    # -- combat (story 30: deferral is for secure frames only) --------------
+
+    def test_tracker_windows_are_not_secure_and_styling_holds_in_combat(self):
+        env = Env()
+        env.set_combat(True)
+        env.boot()
+        env.run("HARNESS.openxp:RenderFrame()")
+        self.assert_flareui_look(env)
+
+    # -- robustness (stories 31-32) -----------------------------------------
+
+    def test_missing_frames_are_skipped_quietly_without_errors(self):
+        # A future OpenXP rename removes the whole feature.
+        env = Env()
+        env.run("""
+          _G.RXPLevelSplits_titleCogwheel = nil
+          _G.RXPLevelSplits_title = nil
+          _G.RXPLevelSplits = nil
+          HARNESS.openxp.tracker.levelSplits = nil
+          HARNESS.openxp.tracker.ui = nil
+        """)
+        env.boot()
+        env.run("HARNESS.openxp:RenderFrame()")
+        env.run("HARNESS.openxp.tracker:CreateLevelSplits()")
+        self.assertEqual(env.chat(), [])
+        env.slash("/oxpfui debug")
+        report = "\n".join(env.chat())
+        self.assertIn("missing frame RXPLevelSplits", report)
+        self.assertIn("Errors: none", report)
+
+    def test_partial_drift_in_the_splits_family_is_skipped_quietly(self):
+        # The frame stays, its internals are gone/renamed.
+        env = Env()
+        env.run("""
+          local f = _G.RXPLevelSplits
+          f.title.text = nil
+          f.title.cog:SetNormalTexture(nil)
+          f.history = nil
+          f.current.label = nil
+        """)
+        env.boot()
+        self.assertEqual(env.chat(), [])
+        # What exists is still skinned...
+        self.assertEqual(env.run("return RXPLevelSplits.backdrop.edgeFile"), FLAREUI_EDGE)
+        self.assertEqual(env.run("return RXPLevelSplits_title.backdrop.edgeFile"), FLAREUI_EDGE)
+        self.assertEqual(env.run(
+            "local p,s,f = RXPLevelSplits.total.label:GetFont(); return p,s,f"),
+            (FRIZQ, 11, ""))
+        # ...and what is gone keeps OpenXP's look.
+        self.assertEqual(env.run(
+            "return (RXPLevelSplits.current.label)"), None)
+        env.slash("/oxpfui debug")
+        self.assertIn("Errors: none", "\n".join(env.chat()))
+
+    def test_report_drift_is_skipped_quietly(self):
+        # A partial drift on the AceGUI report surface.
+        env = Env()
+        env.run("""
+          local r = HARNESS.openxp.tracker.ui['CharacterFrame']
+          r.titletext = nil
+          r.levelButton = nil
+          r.target = nil
+          r.zonesContainer = nil
+          r.sourcesContainer.data = nil
+          r.speedContainer.label = nil
+        """)
+        env.boot()
+        env.run("HARNESS.openxp:RenderFrame()")
+        self.assertEqual(env.chat(), [])
+        # The window and the untouched containers are still skinned.
+        self.assertEqual(env.run(
+            "return HARNESS.openxp.tracker.ui['CharacterFrame'].frame.backdrop.edgeFile"),
+            FLAREUI_EDGE)
+        self.assertEqual(env.run(
+            "local r,g,b,a = HARNESS.openxp.tracker.ui['CharacterFrame']"
+            ".reachedContainer.data.label:GetTextColor(); return r,g,b,a"),
+            (0.85, 0.85, 0.85, 1.0))
+        env.slash("/oxpfui debug")
+        self.assertIn("Errors: none", "\n".join(env.chat()))
+
+    # -- appearance only (stories 12, 29) -----------------------------------
+
+    def test_no_position_or_size_is_ever_changed(self):
+        env = Env()
+        layout = ("SetPoint", "SetSize", "SetWidth", "SetHeight", "SetScale",
+                  "SetAllPoints", "ClearAllPoints")
+        family = ("RXPLevelSplits", "RXPLevelSplits_title",
+                  "RXPLevelSplits_titleCogwheel", "RXPG_SplitsMenuFrame",
+                  "RXPG_LevelMenuFrame")
+        panel_layout = ("HARNESS.openxp.tracker.ui['CharacterFrame'].frame",
+                        "HARNESS.openxp.tracker.ui['CharacterFrame'].levelButton.frame")
+        before = {(f, m): env.calls_made_on(f, m) for f in family for m in layout}
+        before.update({(f, m): env.run(_layout_count_lua(f, m))
+                       for f in panel_layout for m in layout})
+        env.boot()
+        env.run("HARNESS.openxp:RenderFrame()")
+        env.run("HARNESS.openxp.tracker:UpdateLevelSplits()")
+        env.run("HARNESS.openxp.tracker:CreateLevelSplits()")
+        env.run("HARNESS.openxp.card.SkinPanels()")
+        for (f, m), count in before.items():
+            if f in family:
+                self.assertEqual(env.calls_made_on(f, m), count,
+                                 f"{f}:{m} was called by the skin")
+            else:
+                self.assertEqual(env.run(_layout_count_lua(f, m)), count,
+                                 f"{f}:{m} was called by the skin")
+
+    def test_text_contents_click_handlers_and_menus_stay_openxps(self):
+        env = Env()
+        env.boot()
+        env.run("HARNESS.openxp:RenderFrame()")
+        # Splits text is OpenXP's data, never rewritten by the skin.
+        self.assertEqual(env.run("return RXPLevelSplits.current.label:GetText()"),
+                         "Level 41  12:07 (est 18:40)")
+        self.assertEqual(env.run("return RXPLevelSplits.total.label:GetText()"),
+                         "Total  3:24:55")
+        # The cogwheel still opens the menu; nothing re-scripted.
+        self.assertEqual(env.openxp_calls("RXPLevelSplits_titleCogwheel click"), 0)
+        env.run("RXPLevelSplits_titleCogwheel:Click()")
+        self.assertEqual(env.openxp_calls("RXPLevelSplits_titleCogwheel click"), 1)
+        self.assertEqual(env.calls_made_on("RXPLevelSplits_titleCogwheel", "SetScript"), 1)
+        # The dropdown menus are never styled.
+        for menu in ("RXPG_SplitsMenuFrame", "RXPG_LevelMenuFrame"):
+            self.assertEqual(env.calls_made_on(menu), 0, f"{menu} was touched")
 
 
 if __name__ == "__main__":
