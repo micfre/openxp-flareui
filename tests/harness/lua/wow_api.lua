@@ -311,6 +311,11 @@ local texExtra = {
     if not c then return 1, 1, 1, 1 end
     return c[1], c[2], c[3], c[4] or 1
   end,
+  SetDesaturated = function(self, flag)
+    record(self, "SetDesaturated", flag)
+    self.__desaturated = flag and true or false
+  end,
+  GetDesaturated = function(self) return self.__desaturated == true end,
   SetGradient = function(self, orientation, top, bottom)
     record(self, "SetGradient", orientation, top, bottom)
     self.__gradient = { orientation, top, bottom }

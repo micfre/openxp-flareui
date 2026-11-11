@@ -22,6 +22,9 @@ theme.C = {
   BOX = { 0.50, 0.38, 0.21 },       -- bronze square buttons at rest
   BOX_LIT = { 0.65, 0.49, 0.27 },   -- bronze square buttons hovered
   BORDER = { 0.65, 0.49, 0.27, 1 }, -- #A67D45 frame border tint
+  FILL = { 0.10, 0.08, 0.06 },      -- warm near-black: solid form of the
+                                     -- tracker fill's lighter top colour,
+                                     -- used where a plain texture is tinted
 }
 
 -- Typography: header 13 / title 12 / body 11, no outline, 1px black shadow.
