@@ -461,11 +461,37 @@ targetButton(tf.friendlyTargetButtons, "RXPTargetFrame_FriendlyButton1",
 -- can prove targeting still works after OXP-FUI restyles the rows.
 eb1:SetScript("OnClick", function() bump("RXPTargetFrame_EnemyButton1 click") end)
 
--- Other phase 2 panels (tracker/active-item tickets) --------------------------
+-- Other phase 2 panels (tracker / active-item / windows tickets) ----------------
+-- Active-item frame (ActiveItemFrame.lua 261-320): the frame, its title
+-- strip ("Active Items", V1 visuals give the strip its own legacy edge
+-- backdrop), the SECURE item buttons (SecureActionButtonTemplate, kept in
+-- itemFrame.buttonList) and the two hidden SECURE teleport buttons (382-394).
 local itemFrame = CreateFrame("Frame", "RXPItemFrame", UIParent, "BackdropTemplate")
-local itemTitle = CreateFrame("Frame", "RXPItemFrame_title", itemFrame)
+local itemTitle = CreateFrame("Frame", "RXPItemFrame_title", itemFrame, "BackdropTemplate")
 itemTitle.text = itemTitle:CreateFontString(nil, "OVERLAY")
+itemTitle.text:SetFont("Fonts\\ARIALN.TTF", 9, "")
+itemTitle.text:SetTextColor(0.62, 0.64, 0.70, 1)
 itemFrame.title = itemTitle
+itemFrame.buttonList = {}
+local function itemButton(i)
+  local btn = CreateFrame("Button", "RXPItemFrameButton" .. i, itemFrame,
+    "SecureActionButtonTemplate")
+  btn.__protected = true
+  btn:SetAttribute("type1", "item")
+  btn:SetAttribute("item", "item:19019")
+  btn:RegisterForClicks("AnyUp", "AnyDown")
+  btn.icon = btn:CreateTexture(nil, "BACKGROUND")
+  btn.icon:SetAllPoints(true)
+  btn.icon:SetTexture("Interface\\Icons\\INV_Misc_Gem_01")
+  itemFrame.buttonList[i] = btn
+  return btn
+end
+itemButton(1)
+itemButton(2)
+-- Hidden secure teleport buttons; like the quick-target buttons these are
+-- never given any visual treatment.
+CreateFrame("Button", "RXPTELEPORTTO", nil, "SecureActionButtonTemplate").__protected = true
+CreateFrame("Button", "RXPTELEPORTHOME", nil, "SecureActionButtonTemplate").__protected = true
 local splits = CreateFrame("Frame", "RXPLevelSplits", UIParent, "BackdropTemplate")
 local splitsTitle = CreateFrame("Frame", "RXPLevelSplits_title", splits)
 splitsTitle.text = splitsTitle:CreateFontString(nil, "OVERLAY")
@@ -779,6 +805,81 @@ function ResetFeedback()
   end
 end
 
+-- Talents (phase 2, ticket 8) ------------------------------------------------
+-- Mirrors Talents.lua 264-285/339: OpenXP's tab button on Blizzard's talent
+-- frame (square SpellBook-SkillLineTab box art behind the logo, hover
+-- highlight) and its right-click menu anchor (UIDropDownMenuTemplate). The
+-- visible list frame only appears once the menu has been opened.
+local playerTalentFrame = CreateFrame("Frame", "PlayerTalentFrame", UIParent)
+local talentsTab = CreateFrame("Button", "PlayerTalentFrameRXPTalents", playerTalentFrame)
+talentsTab:SetNormalTexture("Interface\\AddOns\\OpenXP\\Textures\\openxp_logo-64")
+talentsTab.bg = talentsTab:CreateTexture("PlayerTalentFrameRXPTalentsBG", "BACKGROUND")
+talentsTab.bg:SetTexture("Interface\\SpellBook\\SpellBook-SkillLineTab")
+talentsTab.bg:SetVertexColor(1, 1, 1)
+talentsTab.bg.ht = talentsTab:CreateTexture(nil, "HIGHLIGHT")
+talentsTab.bg.ht:SetTexture("Interface\\Buttons\\ButtonHilight-Square")
+local talentsMenu = CreateFrame("Frame", "RXP_TalentsMenuFrame", talentsTab,
+  "UIDropDownMenuTemplate")
+-- Simulates the player right-clicking the tab once: the dropdown's list
+-- frame is created lazily by the menu code, only then is it visible.
+function HARNESS.OpenTalentsMenu()
+  if not _G.RXP_TalentsMenuFrameListFrame then
+    CreateFrame("Button", "RXP_TalentsMenuFrameListFrame", nil,
+      "UIDropDownMenuListTemplate")
+  end
+  return _G.RXP_TalentsMenuFrameListFrame
+end
+-- Level tags OpenXP draws on Blizzard's talent rows (Talents.lua 846/1253):
+-- reachable only through Blizzard's own PlayerTalentFrameTalent* namespace,
+-- deliberately out of the skin's reach (see SkinWindows.lua).
+local talentRow = CreateFrame("Button", "PlayerTalentFrameTalent1", playerTalentFrame)
+talentRow.levelHeader = CreateFrame("Frame", "PlayerTalentFrameTalent1_levelText", talentRow)
+talentRow.levelHeader.text = talentRow.levelHeader:CreateFontString(nil, "OVERLAY")
+talentRow.levelHeader.text:SetFont("Fonts\\ARIALN.TTF", 10, "OUTLINE")
+talentRow.levelHeader.text:SetText("12,14")
+
+-- Item upgrades (phase 2, ticket 8) -------------------------------------------
+-- Mirrors ItemUpgrades.lua 850-860/2195-2233: the stat-diff comparison
+-- tooltip OpenXP builds for itself (a GameTooltip with its own text lines),
+-- and OpenXP's Auction House tab, which continues Blizzard's
+-- AuctionFrameTab numbering and is marked isRXP — Blizzard's own tabs carry
+-- no flag and must never be touched by anyone.
+local auctionFrame = CreateFrame("Frame", "AuctionFrame", UIParent)
+auctionFrame.numTabs = 1
+local function auctionTab(index, label, isRXP)
+  local tab = CreateFrame("Button", "AuctionFrameTab" .. index, auctionFrame,
+    "AuctionTabTemplate")
+  tab.isRXP = isRXP
+  tab:SetID(index)
+  tab.Text = tab:CreateFontString("AuctionFrameTab" .. index .. "Text", "OVERLAY",
+    nil, "GameFontHighlightSmall")
+  tab.Text:SetText(label)
+  tab.Text:SetFont("Fonts\\FRIZQT__.TTF", 10, "")
+  tab.Text:SetTextColor(1, 1, 1, 1)
+  return tab
+end
+auctionTab(1, "Bids", false)   -- Blizzard's own tab
+auctionTab(2, "OpenXP", true)  -- OpenXP's item-upgrades tab
+local comparisonTip = CreateFrame("GameTooltip", "RXPItemUpgradesComparison", nil,
+  "GameTooltipTemplate")
+comparisonTip.TextLeft1 = comparisonTip:CreateFontString(
+  "RXPItemUpgradesComparisonTextLeft1", nil, nil, "GameTooltipText")
+comparisonTip.TextRight1 = comparisonTip:CreateFontString(
+  "RXPItemUpgradesComparisonTextRight1", nil, nil, "GameTooltipText")
+
+-- Inventory manager (phase 2, ticket 8) ----------------------------------------
+-- Mirrors InventoryManager.lua 85-143: no visible window exists — an
+-- invisible keybind button, an input-propagation helper frame and a hidden
+-- full-screen click passthrough (BACKGROUND strata, shown only while it
+-- catches the delete-junk click).
+local deleteJunkButton = CreateFrame("Button", "RXPInventory_DeleteJunk")
+deleteJunkButton:SetScript("OnClick", function() bump("RXPInventory_DeleteJunk click") end)
+local deleteJunkFrame = CreateFrame("Frame", "RXPDeleteJunk", UIParent)
+local junkHandler = CreateFrame("Frame", "RXPJunkHandler", UIParent)
+junkHandler:SetAllPoints(UIParent)
+junkHandler:SetFrameStrata("BACKGROUND")
+junkHandler:Hide()
+
 -- EXCLUDED frames (must never be touched by OXP-FUI) ------------------------
 local rxpFrame = CreateFrame("Frame", "RXPFrame", UIParent, "BackdropTemplate")
 CreateFrame("Frame", "RXPFrame_bottomFrame", rxpFrame)
@@ -1026,12 +1127,50 @@ function HARNESS.ApplyOpenXPLook()
   -- The dial/text repaint card.ArrowUpdate does (once the card styled it).
   ArrowPaintOpenXP()
   HARNESS.ApplyTargetsOpenXPLook()
-  local itemFrame = N("RXPItemFrame")
-  applyOpenXPLook(itemFrame, itemFrame and itemFrame.title and itemFrame.title.text or nil)
+  -- Active-item frame: V1 visuals backdrop the frame and its title strip
+  -- and re-font the title (ActiveItemFrame.lua 206-226). Nil-safe so tests
+  -- can simulate the frames going missing.
+  applyOpenXPLook(N("RXPItemFrame"))
+  local itemTitle = N("RXPItemFrame_title")
+  if itemTitle then
+    applyOpenXPLook(itemTitle)
+    if itemTitle.text then
+      itemTitle.text:SetFont("Fonts\\ARIALN.TTF", 9, "")
+      itemTitle.text:SetTextColor(0.62, 0.64, 0.70, 1)
+    end
+  end
   HARNESS.ApplySplitsOpenXPLook()
   HARNESS.ApplyReportOpenXPLook()
   ResetWelcome()
   ResetFeedback()
+  -- Talents: OpenXP never tints the tab's box art; the menu anchor carries
+  -- the harness stand-in charcoal backdrop (nil-safe for missing-frame
+  -- tests).
+  local tab = N("PlayerTalentFrameRXPTalents")
+  if tab and tab.bg and tab.bg.SetVertexColor then
+    tab.bg:SetVertexColor(1, 1, 1)
+  end
+  applyOpenXPLook(N("RXP_TalentsMenuFrame"))
+  applyOpenXPLook(N("RXP_TalentsMenuFrameListFrame"))
+  -- Item upgrades: only OpenXP's own tab (isRXP) is reset — Blizzard's tabs
+  -- are never touched by anyone. The comparison tooltip gets the harness
+  -- stand-in charcoal backdrop.
+  for i = 1, 12 do
+    local tab = N("AuctionFrameTab" .. i)
+    if not tab then break end
+    if tab.isRXP then
+      applyOpenXPLook(tab)
+      if tab.Text then
+        tab.Text:SetFont("Fonts\\FRIZQT__.TTF", 10, "")
+        tab.Text:SetTextColor(1, 1, 1, 1)
+      end
+    end
+  end
+  applyOpenXPLook(N("RXPItemUpgradesComparison"))
+  -- Inventory manager: harness stand-in — OpenXP shows no backdrop anywhere
+  -- here; the charcoal backdrop on the helper frame gives tests an
+  -- observable OpenXP state for the one frame OXP-FUI dresses.
+  applyOpenXPLook(N("RXPDeleteJunk"))
 end
 
 HARNESS.ApplyOpenXPLook()
@@ -1126,9 +1265,29 @@ addon.tracker = {
   CreateLevelSplits = function() bump("tracker.CreateLevelSplits"); HARNESS.ApplyOpenXPLook() end,
 }
 addon.activeItemFrame = itemFrame
+-- UpdateV1IconFrameVisuals (ActiveItemFrame.lua 206-226): the frame and its
+-- title strip get the legacy backdrop, the title is re-fonted at 9pt.
 addon.activeItemFrame.UpdateVisuals = function() bump("activeItemFrame.UpdateVisuals")
   applyOpenXPLook(N("RXPItemFrame"))
+  local itemTitle = N("RXPItemFrame_title")
+  if itemTitle then
+    applyOpenXPLook(itemTitle)
+    if itemTitle.text then
+      itemTitle.text:SetFont("Fonts\\ARIALN.TTF", 9, "")
+      itemTitle.text:SetTextColor(0.62, 0.64, 0.70, 1)
+    end
+  end
 end
+addon.talents = {
+  talentsButton = talentsTab,
+  menuFrame = talentsMenu,
+}
+addon.itemUpgrades = {}
+addon.inventoryManager = {
+  deleteJunkButton = deleteJunkButton,
+  DeleteJunkFrame = deleteJunkFrame,
+  clickFrame = junkHandler,
+}
 
 -- The two windows this harness creates lazily (see the phase 2 section
 -- above). Real signatures: welcome.Show(mode, lastSeen) / feedback.Show().

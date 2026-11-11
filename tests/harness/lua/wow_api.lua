@@ -220,7 +220,7 @@ local function newFrame(frameType, name, parent, template)
   local f = newObject("Frame", frameType, name, parent)
   if template then f.template = template end
 
-  if frameType == "Frame" or frameType == "Button" or frameType == "Slider" or frameType == "CheckButton" or frameType == "EditBox" then
+  if frameType == "Frame" or frameType == "Button" or frameType == "Slider" or frameType == "CheckButton" or frameType == "EditBox" or frameType == "GameTooltip" then
     f.CreateTexture = function(self, name2, layer, _, template2)
       local tex = newObject("Texture", "Texture", name2, self)
       tex.__layer = layer

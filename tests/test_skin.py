@@ -1146,5 +1146,542 @@ class TrackerSplits(unittest.TestCase):
             self.assertEqual(env.calls_made_on(menu), 0, f"{menu} was touched")
 
 
+class ActiveItems(unittest.TestCase):
+    """Ticket #8 (story 16): the shipped active-item frame skin, observed
+    through the skin seam like the Quest Targets skin above."""
+
+    def test_frame_title_strip_and_title_get_flareui_look_after_login(self):
+        env = Env()
+        env.boot()
+        # Frame: FlareUI backdrop like the guide card / Quest Targets.
+        self.assertEqual(env.run("return RXPItemFrame.backdrop.edgeFile"), FLAREUI_EDGE)
+        self.assertEqual(env.run("return RXPItemFrame.backdrop.edgeSize"), 16)
+        self.assertEqual(env.run(
+            "local r,g,b,a = RXPItemFrame:GetBackdropBorderColor(); return r,g,b,a"),
+            (0.65, 0.49, 0.27, 1.0))
+        self.assertEqual(env.run(
+            "local r,g,b,a = RXPItemFrame:GetBackdropColor(); return r,g,b,a"),
+            (1.0, 1.0, 1.0, 0.6))
+        # Title strip: a FlareUI header band sits on the panel fill, so
+        # OpenXP's own edge backdrop on the strip is replaced by the warm
+        # fill without a border of its own.
+        self.assertIsNone(env.run("return RXPItemFrame_title.backdrop.edgeFile"))
+        self.assertEqual(env.run("return RXPItemFrame_title.backdrop.bgFile"),
+                         "Interface\\DialogFrame\\UI-DialogBox-Background-Dark")
+        self.assertEqual(env.run(
+            "local r,g,b,a = RXPItemFrame_title:GetBackdropColor(); return r,g,b,a"),
+            (1.0, 1.0, 1.0, 0.6))
+        # "Active Items" in gold header typography with the 1px shadow.
+        self.assertEqual(env.run(
+            "local p,s,f = RXPItemFrame_title.text:GetFont(); return p,s,f"),
+            (FRIZQ, 13, ""))
+        self.assertEqual(env.run(
+            "local r,g,b,a = RXPItemFrame_title.text:GetTextColor(); return r,g,b,a"),
+            (1.0, 0.82, 0.0, 1.0))
+        self.assertEqual(env.run(
+            "local x,y = RXPItemFrame_title.text:GetShadowOffset(); return x,y"), (1, -1))
+        self.assertEqual(env.run(
+            "local r,g,b,a = RXPItemFrame_title.text:GetShadowColor(); return r,g,b,a"),
+            (0.0, 0.0, 0.0, 1.0))
+        self.assertEqual(env.chat(), [])
+
+    # -- helpers -----------------------------------------------------------
+
+    def assert_flareui_look(self, env):
+        self.assertEqual(env.run("return RXPItemFrame.backdrop.edgeFile"), FLAREUI_EDGE)
+        self.assertIsNone(env.run("return RXPItemFrame_title.backdrop.edgeFile"))
+        self.assertEqual(env.run(
+            "local p,s,f = RXPItemFrame_title.text:GetFont(); return p,s,f"),
+            (FRIZQ, 13, ""))
+        self.assertEqual(env.run(
+            "local r,g,b,a = RXPItemFrame_title.text:GetTextColor(); return r,g,b,a"),
+            (1.0, 0.82, 0.0, 1.0))
+
+    def assert_openxp_look(self, env):
+        self.assertEqual(env.run("return RXPItemFrame.backdrop.edgeFile"), OPENXP_EDGE)
+        self.assertEqual(env.run("return RXPItemFrame_title.backdrop.edgeFile"), OPENXP_EDGE)
+        self.assertEqual(env.run(
+            "local p,s,f = RXPItemFrame_title.text:GetFont(); return p,s,f"),
+            ("Fonts\\ARIALN.TTF", 9, ""))
+
+    # -- re-apply after OpenXP refreshes (stories 22-23) --------------------
+
+    def test_skin_wins_after_every_openxp_refresh_of_the_item_frame(self):
+        refreshes = [
+            "HARNESS.openxp:RenderFrame()",
+            "HARNESS.openxp:ReloadTheme()",
+            "HARNESS.openxp.activeItemFrame.UpdateVisuals()",
+            "HARNESS.openxp.card.SkinPanels()",
+        ]
+        for call in refreshes:
+            with self.subTest(call=call):
+                env = Env()
+                env.boot()
+                env.run(call)
+                self.assert_flareui_look(env)
+                self.assertEqual(env.chat(), [])
+
+    # -- switches (stories 24-25) -------------------------------------------
+
+    def test_per_window_switch_off_leaves_the_item_frame_untouched(self):
+        env = Env(db={"windows": {"activeitems": False}})
+        env.boot()
+        env.run("HARNESS.openxp.activeItemFrame.UpdateVisuals()")
+        self.assert_openxp_look(env)
+        env.slash("/oxpfui debug")
+        self.assertIn("window 'activeitems' is switched off", "\n".join(env.chat()))
+
+    def test_master_switch_off_leaves_the_item_frame_untouched(self):
+        env = Env(db={"enabled": False})
+        env.boot()
+        env.run("HARNESS.openxp:RenderFrame()")
+        env.run("HARNESS.openxp.activeItemFrame.UpdateVisuals()")
+        self.assert_openxp_look(env)
+        self.assertEqual(env.chat(), [])
+
+    # -- robustness (stories 31-32) -----------------------------------------
+
+    def test_missing_frames_are_skipped_quietly_without_errors(self):
+        env = Env()
+        env.run("""
+          _G.RXPItemFrameButton1 = nil
+          _G.RXPItemFrameButton2 = nil
+          _G.RXPItemFrame_title = nil
+          _G.RXPItemFrame = nil
+          HARNESS.openxp.activeItemFrame = nil
+        """)
+        env.boot()
+        env.run("HARNESS.openxp:RenderFrame()")
+        self.assertEqual(env.chat(), [])
+        env.slash("/oxpfui debug")
+        report = "\n".join(env.chat())
+        self.assertIn("missing frame RXPItemFrame", report)
+        self.assertIn("Errors: none", report)
+
+    def test_missing_title_text_is_skipped_quietly(self):
+        env = Env()
+        env.run("_G.RXPItemFrame_title.text = nil")
+        env.boot()
+        self.assertEqual(env.chat(), [])
+        # What exists is still skinned; the missing text is skipped.
+        self.assertEqual(env.run("return RXPItemFrame.backdrop.edgeFile"), FLAREUI_EDGE)
+        self.assertIsNone(env.run("return RXPItemFrame_title.backdrop.edgeFile"))
+        env.slash("/oxpfui debug")
+        self.assertIn("Errors: none", "\n".join(env.chat()))
+
+    # -- secure frames stay functional (stories 12, 30) ----------------------
+
+    def test_item_buttons_and_teleport_buttons_are_never_restyled(self):
+        env = Env()
+        secure = ("RXPItemFrameButton1", "RXPItemFrameButton2",
+                  "RXPTELEPORTTO", "RXPTELEPORTHOME")
+        visual = ("SetBackdrop", "SetBackdropColor", "SetBackdropBorderColor",
+                  "SetFont", "SetTextColor", "SetTexture", "SetColorTexture",
+                  "SetVertexColor", "SetNormalTexture")
+        before = {(f, m): env.calls_made_on(f, m) for f in secure for m in visual}
+        env.boot()
+        env.run("HARNESS.openxp:RenderFrame()")
+        env.run("HARNESS.openxp.activeItemFrame.UpdateVisuals()")
+        for (f, m), count in before.items():
+            self.assertEqual(env.calls_made_on(f, m), count, f"{f}:{m} was called")
+        # Icons, attributes and click registration are exactly OpenXP's own.
+        self.assertEqual(env.run("return RXPItemFrameButton1.icon.__texture"),
+                         "Interface\\Icons\\INV_Misc_Gem_01")
+        self.assertEqual(env.run("return RXPItemFrameButton1:GetAttribute('type1')"),
+                         "item")
+        self.assertEqual(env.run("return RXPItemFrameButton2:GetAttribute('item')"),
+                         "item:19019")
+
+    def test_frame_is_skinned_in_combat_since_no_secure_frame_is_touched(self):
+        env = Env()
+        env.set_combat(True)
+        env.boot()
+        # The skin touches no secure frame, so nothing is deferred.
+        self.assert_flareui_look(env)
+
+    # -- appearance only (story 29) -----------------------------------------
+
+    def test_no_position_or_size_is_ever_changed(self):
+        env = Env()
+        layout = ("SetPoint", "SetSize", "SetWidth", "SetHeight", "SetScale",
+                  "SetAllPoints", "ClearAllPoints")
+        family = ("RXPItemFrame", "RXPItemFrame_title", "RXPItemFrameButton1",
+                  "RXPItemFrameButton2", "RXPTELEPORTTO", "RXPTELEPORTHOME")
+        before = {(f, m): env.calls_made_on(f, m) for f in family for m in layout}
+        env.boot()
+        env.run("HARNESS.openxp:RenderFrame()")
+        env.run("HARNESS.openxp.activeItemFrame.UpdateVisuals()")
+        for (f, m), count in before.items():
+            self.assertEqual(env.calls_made_on(f, m), count,
+                             f"{f}:{m} was called by the skin")
+
+
+class Talents(unittest.TestCase):
+    """Ticket #8 (story 16): the shipped talents skin — OpenXP's tab button
+    on Blizzard's talent frame and its right-click menu."""
+
+    def test_tab_box_and_menu_get_flareui_look_after_login(self):
+        env = Env()
+        env.boot()
+        # The tab's square box art is tinted the FlareUI border bronze; the
+        # logo and the hover highlight keep OpenXP's own look.
+        self.assertEqual(env.run(
+            "local c = PlayerTalentFrameRXPTalentsBG.__vertexColor; return c[1],c[2],c[3]"),
+            (0.65, 0.49, 0.27))
+        self.assertEqual(env.run("return PlayerTalentFrameRXPTalents:GetNormalTexture()"),
+                         "Interface\\AddOns\\OpenXP\\Textures\\openxp_logo-64")
+        self.assertEqual(env.run(
+            "return PlayerTalentFrameRXPTalentsBG.ht.__texture"),
+                         "Interface\\Buttons\\ButtonHilight-Square")
+        # The menu dropdown gets the FlareUI panel.
+        self.assertEqual(env.run("return RXP_TalentsMenuFrame.backdrop.edgeFile"), FLAREUI_EDGE)
+        self.assertEqual(env.run(
+            "local r,g,b,a = RXP_TalentsMenuFrame:GetBackdropBorderColor(); return r,g,b,a"),
+            (0.65, 0.49, 0.27, 1.0))
+        self.assertEqual(env.chat(), [])
+
+    def assert_flareui_look(self, env):
+        self.assertEqual(env.run(
+            "local c = PlayerTalentFrameRXPTalentsBG.__vertexColor; return c[1],c[2],c[3]"),
+            (0.65, 0.49, 0.27))
+        self.assertEqual(env.run("return RXP_TalentsMenuFrame.backdrop.edgeFile"), FLAREUI_EDGE)
+
+    def assert_openxp_look(self, env):
+        self.assertEqual(env.run(
+            "local c = PlayerTalentFrameRXPTalentsBG.__vertexColor; return c[1],c[2],c[3]"),
+            (1.0, 1.0, 1.0))
+        self.assertEqual(env.run("return RXP_TalentsMenuFrame.backdrop.edgeFile"), OPENXP_EDGE)
+
+    # -- lazily created frames (story 23) ------------------------------------
+
+    def test_menu_list_frame_is_skinned_once_the_menu_has_been_opened(self):
+        env = Env()
+        env.boot()
+        env.run("HARNESS.OpenTalentsMenu()")
+        # Created after the last apply pass: still OpenXP's own look...
+        self.assertIsNone(env.run("return RXP_TalentsMenuFrameListFrame.backdrop"))
+        # ...and the next OpenXP re-render brings it into the look.
+        env.run("HARNESS.openxp:RenderFrame()")
+        self.assertEqual(env.run("return RXP_TalentsMenuFrameListFrame.backdrop.edgeFile"),
+                         FLAREUI_EDGE)
+        self.assertEqual(env.chat(), [])
+
+    # -- Blizzard frames stay untouched (stories 18-20) -----------------------
+
+    def test_blizzard_talent_frame_and_rows_are_never_touched(self):
+        env = Env()
+        blizzard = ("PlayerTalentFrame", "PlayerTalentFrameTalent1",
+                    "PlayerTalentFrameTalent1_levelText")
+        before = {f: env.calls_made_on(f) for f in blizzard}
+        env.boot()
+        env.run("HARNESS.openxp:RenderFrame()")
+        env.run("HARNESS.openxp:ReloadTheme()")
+        for f in blizzard:
+            self.assertEqual(env.calls_made_on(f), before[f], f"{f} was touched")
+        # The level tag keeps OpenXP's own font (deliberate, see SkinWindows).
+        self.assertEqual(env.run(
+            "local p,s,f = PlayerTalentFrameTalent1_levelText.text:GetFont(); return p,s,f"),
+            ("Fonts\\ARIALN.TTF", 10, "OUTLINE"))
+
+    # -- re-apply after OpenXP refreshes (stories 22-23) ----------------------
+
+    def test_skin_wins_after_every_openxp_refresh(self):
+        for call in ("HARNESS.openxp:RenderFrame()", "HARNESS.openxp:ReloadTheme()",
+                     "HARNESS.openxp.card.SkinPanels()"):
+            with self.subTest(call=call):
+                env = Env()
+                env.boot()
+                env.run(call)
+                self.assert_flareui_look(env)
+                self.assertEqual(env.chat(), [])
+
+    # -- switches (stories 24-25) ----------------------------------------------
+
+    def test_per_window_switch_off_leaves_the_talents_surfaces_untouched(self):
+        env = Env(db={"windows": {"talents": False}})
+        env.boot()
+        env.run("HARNESS.openxp:RenderFrame()")
+        self.assert_openxp_look(env)
+        env.slash("/oxpfui debug")
+        self.assertIn("window 'talents' is switched off", "\n".join(env.chat()))
+
+    def test_master_switch_off_leaves_the_talents_surfaces_untouched(self):
+        env = Env(db={"enabled": False})
+        env.boot()
+        env.run("HARNESS.openxp:RenderFrame()")
+        self.assert_openxp_look(env)
+        self.assertEqual(env.chat(), [])
+
+    # -- robustness (stories 31-32) ---------------------------------------------
+
+    def test_missing_frames_are_skipped_quietly_without_errors(self):
+        # A future OpenXP rename drops the tab button and the menu entirely.
+        env = Env()
+        env.run("""
+          _G.PlayerTalentFrameRXPTalents = nil
+          _G.RXP_TalentsMenuFrame = nil
+          HARNESS.openxp.talents = nil
+        """)
+        env.boot()
+        env.run("HARNESS.openxp:RenderFrame()")
+        self.assertEqual(env.chat(), [])
+        env.slash("/oxpfui debug")
+        report = "\n".join(env.chat())
+        self.assertIn("missing frame PlayerTalentFrameRXPTalents", report)
+        self.assertIn("Errors: none", report)
+
+    def test_missing_box_art_is_skipped_quietly(self):
+        env = Env()
+        env.run("_G.PlayerTalentFrameRXPTalents.bg = nil")
+        env.boot()
+        self.assertEqual(env.chat(), [])
+        # The menu is still skinned; only the missing texture is skipped.
+        self.assertEqual(env.run("return RXP_TalentsMenuFrame.backdrop.edgeFile"), FLAREUI_EDGE)
+        env.slash("/oxpfui debug")
+        self.assertIn("Errors: none", "\n".join(env.chat()))
+
+    # -- appearance only (story 29) -----------------------------------------------
+
+    def test_no_position_or_size_is_ever_changed(self):
+        env = Env()
+        layout = ("SetPoint", "SetSize", "SetWidth", "SetHeight", "SetScale",
+                  "SetAllPoints", "ClearAllPoints")
+        family = ("PlayerTalentFrameRXPTalents", "PlayerTalentFrameRXPTalentsBG",
+                  "RXP_TalentsMenuFrame")
+        before = {(f, m): env.calls_made_on(f, m) for f in family for m in layout}
+        env.boot()
+        env.run("HARNESS.openxp:RenderFrame()")
+        for (f, m), count in before.items():
+            self.assertEqual(env.calls_made_on(f, m), count,
+                             f"{f}:{m} was called by the skin")
+
+
+class ItemUpgradesWindows(unittest.TestCase):
+    """Ticket #8 (story 16): the shipped item-upgrades skin — OpenXP's own
+    Auction House tab (told apart from Blizzard's tabs by the isRXP flag)
+    and the stat-diff comparison tooltip OpenXP builds for itself."""
+
+    def test_comparison_tooltip_and_own_ah_tab_get_flareui_look_after_login(self):
+        env = Env()
+        env.boot()
+        # OpenXP's tab (isRXP): FlareUI panel + gold tab label.
+        self.assertEqual(env.run("return AuctionFrameTab2.backdrop.edgeFile"), FLAREUI_EDGE)
+        self.assertEqual(env.run(
+            "local r,g,b,a = AuctionFrameTab2:GetBackdropBorderColor(); return r,g,b,a"),
+            (0.65, 0.49, 0.27, 1.0))
+        self.assertEqual(env.run(
+            "local p,s,f = AuctionFrameTab2Text:GetFont(); return p,s,f"),
+            (FRIZQ, 12, ""))
+        self.assertEqual(env.run(
+            "local r,g,b,a = AuctionFrameTab2Text:GetTextColor(); return r,g,b,a"),
+            (1.0, 0.82, 0.0, 1.0))
+        self.assertEqual(env.run(
+            "local x,y = AuctionFrameTab2Text:GetShadowOffset(); return x,y"), (1, -1))
+        # The comparison tooltip: FlareUI panel.
+        self.assertEqual(env.run("return RXPItemUpgradesComparison.backdrop.edgeFile"),
+                         FLAREUI_EDGE)
+        self.assertEqual(env.run(
+            "local r,g,b,a = RXPItemUpgradesComparison:GetBackdropColor(); return r,g,b,a"),
+            (1.0, 1.0, 1.0, 0.6))
+        self.assertEqual(env.chat(), [])
+
+    def assert_flareui_look(self, env):
+        self.assertEqual(env.run("return AuctionFrameTab2.backdrop.edgeFile"), FLAREUI_EDGE)
+        self.assertEqual(env.run(
+            "local p,s,f = AuctionFrameTab2Text:GetFont(); return p,s,f"),
+            (FRIZQ, 12, ""))
+        self.assertEqual(env.run("return RXPItemUpgradesComparison.backdrop.edgeFile"),
+                         FLAREUI_EDGE)
+
+    def assert_openxp_look(self, env):
+        self.assertEqual(env.run("return AuctionFrameTab2.backdrop.edgeFile"), OPENXP_EDGE)
+        self.assertEqual(env.run(
+            "local p,s,f = AuctionFrameTab2Text:GetFont(); return p,s,f"),
+            ("Fonts\\FRIZQT__.TTF", 10, ""))
+        self.assertEqual(env.run("return RXPItemUpgradesComparison.backdrop.edgeFile"),
+                         OPENXP_EDGE)
+
+    # -- Blizzard frames stay untouched (stories 18-20) -----------------------
+
+    def test_blizzard_tabs_and_the_auction_frame_are_never_touched(self):
+        env = Env()
+        blizzard = ("AuctionFrame", "AuctionFrameTab1", "AuctionFrameTab1Text")
+        before = {f: env.calls_made_on(f) for f in blizzard}
+        env.boot()
+        env.run("HARNESS.openxp:RenderFrame()")
+        env.run("HARNESS.openxp:ReloadTheme()")
+        for f in blizzard:
+            self.assertEqual(env.calls_made_on(f), before[f], f"{f} was touched")
+        # Blizzard's tab keeps its own label look and no OXP-FUI backdrop.
+        self.assertIsNone(env.run("return AuctionFrameTab1.backdrop"))
+        self.assertEqual(env.run(
+            "local r,g,b,a = AuctionFrameTab1Text:GetTextColor(); return r,g,b,a"),
+            (1.0, 1.0, 1.0, 1.0))
+
+    # -- re-apply after OpenXP refreshes (stories 22-23) ----------------------
+
+    def test_skin_wins_after_every_openxp_refresh(self):
+        for call in ("HARNESS.openxp:RenderFrame()", "HARNESS.openxp:ReloadTheme()",
+                     "HARNESS.openxp.card.SkinPanels()"):
+            with self.subTest(call=call):
+                env = Env()
+                env.boot()
+                env.run(call)
+                self.assert_flareui_look(env)
+                self.assertEqual(env.chat(), [])
+
+    # -- switches (stories 24-25) ----------------------------------------------
+
+    def test_per_window_switch_off_leaves_the_upgrades_surfaces_untouched(self):
+        env = Env(db={"windows": {"upgrades": False}})
+        env.boot()
+        env.run("HARNESS.openxp:RenderFrame()")
+        self.assert_openxp_look(env)
+        env.slash("/oxpfui debug")
+        self.assertIn("window 'upgrades' is switched off", "\n".join(env.chat()))
+
+    def test_master_switch_off_leaves_the_upgrades_surfaces_untouched(self):
+        env = Env(db={"enabled": False})
+        env.boot()
+        env.run("HARNESS.openxp:RenderFrame()")
+        self.assert_openxp_look(env)
+        self.assertEqual(env.chat(), [])
+
+    # -- robustness (stories 31-32) ---------------------------------------------
+
+    def test_missing_frames_are_skipped_quietly_without_errors(self):
+        # The Auction House was never opened and OpenXP renamed the tooltip.
+        env = Env()
+        env.run("""
+          _G.AuctionFrameTab1 = nil
+          _G.AuctionFrameTab2 = nil
+          _G.RXPItemUpgradesComparison = nil
+        """)
+        env.boot()
+        env.run("HARNESS.openxp:RenderFrame()")
+        self.assertEqual(env.chat(), [])
+        env.slash("/oxpfui debug")
+        report = "\n".join(env.chat())
+        self.assertIn("missing frame RXPItemUpgradesComparison", report)
+        self.assertIn("Errors: none", report)
+
+    def test_missing_tab_text_is_skipped_quietly(self):
+        env = Env()
+        env.run("_G.AuctionFrameTab2Text = nil")
+        env.boot()
+        self.assertEqual(env.chat(), [])
+        # The tab itself is still framed; only the label font is skipped.
+        self.assertEqual(env.run("return AuctionFrameTab2.backdrop.edgeFile"), FLAREUI_EDGE)
+        env.slash("/oxpfui debug")
+        self.assertIn("Errors: none", "\n".join(env.chat()))
+
+    # -- appearance only (story 29) -----------------------------------------------
+
+    def test_no_position_or_size_is_ever_changed(self):
+        env = Env()
+        layout = ("SetPoint", "SetSize", "SetWidth", "SetHeight", "SetScale",
+                  "SetAllPoints", "ClearAllPoints")
+        family = ("AuctionFrame", "AuctionFrameTab1", "AuctionFrameTab2",
+                  "RXPItemUpgradesComparison")
+        before = {(f, m): env.calls_made_on(f, m) for f in family for m in layout}
+        env.boot()
+        env.run("HARNESS.openxp:RenderFrame()")
+        for (f, m), count in before.items():
+            self.assertEqual(env.calls_made_on(f, m), count,
+                             f"{f}:{m} was called by the skin")
+
+
+class InventoryManagerWindow(unittest.TestCase):
+    """Ticket #8 (story 16): the shipped inventory-manager skin. OpenXP has
+    no visible window here — an invisible keybind button, an input-propagation
+    helper frame and a hidden full-screen click passthrough — so only the
+    helper frame is dressed; the passthrough must never get a backdrop (it
+    would flash on screen while it catches the delete click)."""
+
+    def test_delete_junk_frame_gets_flareui_backdrop_after_login(self):
+        env = Env()
+        env.boot()
+        self.assertEqual(env.run("return RXPDeleteJunk.backdrop.edgeFile"), FLAREUI_EDGE)
+        self.assertEqual(env.run("return RXPDeleteJunk.backdrop.edgeSize"), 16)
+        self.assertEqual(env.run(
+            "local r,g,b,a = RXPDeleteJunk:GetBackdropBorderColor(); return r,g,b,a"),
+            (0.65, 0.49, 0.27, 1.0))
+        self.assertEqual(env.run(
+            "local r,g,b,a = RXPDeleteJunk:GetBackdropColor(); return r,g,b,a"),
+            (1.0, 1.0, 1.0, 0.6))
+        self.assertEqual(env.chat(), [])
+
+    def test_invisible_helpers_never_get_visual_changes(self):
+        env = Env()
+        helpers = ("RXPInventory_DeleteJunk", "RXPJunkHandler")
+        visual = ("SetBackdrop", "SetBackdropColor", "SetBackdropBorderColor",
+                  "SetFont", "SetTextColor", "SetTexture", "SetColorTexture",
+                  "SetVertexColor", "Show")
+        before = {(f, m): env.calls_made_on(f, m) for f in helpers for m in visual}
+        env.boot()
+        env.run("HARNESS.openxp:RenderFrame()")
+        for (f, m), count in before.items():
+            self.assertEqual(env.calls_made_on(f, m), count, f"{f}:{m} was called")
+        # The passthrough stays hidden and the keybind still fires.
+        self.assertEqual(env.run("return RXPJunkHandler:IsShown()"), False)
+        self.assertEqual(env.openxp_calls("RXPInventory_DeleteJunk click"), 0)
+        env.run("RXPInventory_DeleteJunk:Click()")
+        self.assertEqual(env.openxp_calls("RXPInventory_DeleteJunk click"), 1)
+
+    def test_skin_wins_after_every_openxp_refresh(self):
+        for call in ("HARNESS.openxp:RenderFrame()", "HARNESS.openxp:ReloadTheme()",
+                     "HARNESS.openxp.card.SkinPanels()"):
+            with self.subTest(call=call):
+                env = Env()
+                env.boot()
+                env.run(call)
+                self.assertEqual(env.run("return RXPDeleteJunk.backdrop.edgeFile"),
+                                 FLAREUI_EDGE)
+                self.assertEqual(env.chat(), [])
+
+    def test_per_window_switch_off_leaves_the_frame_untouched(self):
+        env = Env(db={"windows": {"inventory": False}})
+        env.boot()
+        env.run("HARNESS.openxp:RenderFrame()")
+        self.assertEqual(env.run("return RXPDeleteJunk.backdrop.edgeFile"), OPENXP_EDGE)
+        env.slash("/oxpfui debug")
+        self.assertIn("window 'inventory' is switched off", "\n".join(env.chat()))
+
+    def test_master_switch_off_leaves_the_frame_untouched(self):
+        env = Env(db={"enabled": False})
+        env.boot()
+        env.run("HARNESS.openxp:RenderFrame()")
+        self.assertEqual(env.run("return RXPDeleteJunk.backdrop.edgeFile"), OPENXP_EDGE)
+        self.assertEqual(env.chat(), [])
+
+    def test_missing_frames_are_skipped_quietly_without_errors(self):
+        env = Env()
+        env.run("""
+          _G.RXPInventory_DeleteJunk = nil
+          _G.RXPDeleteJunk = nil
+          _G.RXPJunkHandler = nil
+          HARNESS.openxp.inventoryManager = nil
+        """)
+        env.boot()
+        env.run("HARNESS.openxp:RenderFrame()")
+        self.assertEqual(env.chat(), [])
+        env.slash("/oxpfui debug")
+        report = "\n".join(env.chat())
+        self.assertIn("missing frame RXPDeleteJunk", report)
+        self.assertIn("Errors: none", report)
+
+    def test_no_position_or_size_is_ever_changed(self):
+        env = Env()
+        layout = ("SetPoint", "SetSize", "SetWidth", "SetHeight", "SetScale",
+                  "SetAllPoints", "ClearAllPoints")
+        family = ("RXPDeleteJunk", "RXPInventory_DeleteJunk", "RXPJunkHandler")
+        before = {(f, m): env.calls_made_on(f, m) for f in family for m in layout}
+        env.boot()
+        env.run("HARNESS.openxp:RenderFrame()")
+        for (f, m), count in before.items():
+            self.assertEqual(env.calls_made_on(f, m), count,
+                             f"{f}:{m} was called by the skin")
+
+
 if __name__ == "__main__":
     unittest.main()

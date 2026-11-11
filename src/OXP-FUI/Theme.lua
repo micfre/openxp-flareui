@@ -77,6 +77,24 @@ function theme.ApplyBackdrop(frame)
   frame:SetBackdropBorderColor(b[1], b[2], b[3], b[4])
 end
 
+-- The header-band variant: FlareUI's tracker header sits on the panel fill
+-- with no border of its own (ObjectiveTracker CreateFrames has no separate
+-- header background). Used for OpenXP's small title strips that carry their
+-- own legacy edge backdrop — the strip blends into the framed panel instead
+-- of drawing a second border inside it.
+function theme.ApplyPanelFill(frame)
+  local db = OXPFUI.db or {}
+  local opacity = db.opacity
+  if type(opacity) ~= "number" then opacity = 0.6 end
+  frame:SetBackdrop({
+    bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background-Dark",
+    edgeFile = nil,
+    tile = false, tileSize = 0, edgeSize = 0,
+    insets = { left = 3, right = 3, top = 3, bottom = 3 },
+  })
+  frame:SetBackdropColor(1, 1, 1, opacity)
+end
+
 -- Apply the FlareUI typography to a font string: chosen face, size for its
 -- kind, no outline, 1px black shadow at (+1, -1).
 function theme.ApplyFontString(fs, kind)

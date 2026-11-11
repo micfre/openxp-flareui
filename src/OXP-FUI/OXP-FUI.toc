@@ -14,5 +14,6 @@ ArrowSkin.lua
 Card.lua
 SkinTargets.lua
 SkinTracker.lua
+SkinWindows.lua
 WelcomeFeedback.lua
 SettingsPanel.lua
