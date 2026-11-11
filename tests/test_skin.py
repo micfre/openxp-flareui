@@ -248,6 +248,10 @@ class LoadsQuietly(unittest.TestCase):
         env = Env(db={"enabled": False})
         env.install_skins(ARROW_SKIN)
         env.boot()
+        # Open both lazily-created phase 2 windows too (the real addon only
+        # creates them on first use).
+        env.run("HARNESS.openxp.welcome.Show('welcome')")
+        env.run("HARNESS.openxp.feedback.Show()")
         # Fire every refresh path OpenXP has: OXP-FUI must stay inert, i.e.
         # every window keeps OpenXP's own look (state, not call counts: the
         # fake OpenXP legitimately restyles its own frames on refresh).

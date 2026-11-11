@@ -329,6 +329,10 @@ local function InstallHooks()
   HookRefresh(openxp.tracker, "CreateLevelSplits", "tracker.CreateLevelSplits")
   HookRefresh(openxp.activeItemFrame, "UpdateVisuals", "activeItemFrame.UpdateVisuals")
   HookRefresh(openxp.arrowFrame, "UpdateVisuals", "arrowFrame.UpdateVisuals")
+  -- The welcome and feedback windows are created lazily on first Show():
+  -- re-apply when one appears (or is re-shown after a rebuild).
+  HookRefresh(openxp.welcome, "Show", "welcome.Show")
+  HookRefresh(openxp.feedback, "Show", "feedback.Show")
 end
 
 OXPFUI._InstallHooks = InstallHooks -- exposed for tests/skin development

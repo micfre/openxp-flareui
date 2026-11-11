@@ -10,6 +10,8 @@ Core.lua
 Locale.lua
 Theme.lua
 Engine.lua
+ArrowSkin.lua
 SkinTargets.lua
 SkinTooltips.lua
+WelcomeFeedback.lua
 SettingsPanel.lua
