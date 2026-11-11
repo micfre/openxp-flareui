@@ -31,9 +31,95 @@ card.header = cardHeader
 card.header.zone = cardHeader:CreateFontString(nil, "OVERLAY")
 
 -- Waypoint arrow (phase 1) --------------------------------------------------
+-- Mirrors map.lua plus the card's arrow code (OpenXPCard.lua): StyleArrow
+-- creates the dial textures and the dist/label font strings once; the
+-- OnUpdate handler (card's ArrowUpdate) then repaints the ring tint and
+-- the distance text colour EVERY FRAME, following the arrived state. A
+-- skin under test must therefore win not only over the refresh calls but
+-- also over that per-frame repaint.
 local af = CreateFrame("Frame", "RXPG_ARROW", UIParent)
 af.texture = af:CreateTexture(nil, "ARTWORK")
 af.text = af:CreateFontString(nil, "OVERLAY")
+
+local OXP_TEX = "Interface\\AddOns\\OpenXP\\Textures\\Card\\"
+-- The slice of OpenXPCard.lua's local C table the arrow repaint uses.
+local OXP_C = {
+  blue = { 90 / 255, 184 / 255, 1 },
+  green = { 61 / 255, 187 / 255, 122 / 255 },
+}
+local function OXPTint(tex, color, alpha)
+  tex:SetVertexColor(color[1], color[2], color[3], alpha or color[4] or 1)
+end
+
+-- Arrow state DrawArrow would maintain (map.lua); tests drive it directly.
+af.distance = 100
+af.element = { title = "Kill: Forest Wolf Pack" }
+
+-- map.lua drag handlers: OpenXP behaviour OXP-FUI must leave untouched.
+af:SetMovable(true)
+af:EnableMouse(1)
+af:SetScript("OnMouseDown", function(self)
+  local a = HARNESS.openxp
+  if a and not a.settings.profile.lockFrames and self:GetAlpha() ~= 0 then
+    self:StartMoving()
+  end
+end)
+af:SetScript("OnMouseUp", function(self)
+  self:StopMovingOrSizing()
+end)
+
+-- card.StyleArrow (OpenXPCard.lua:2196): dial + text, created once.
+local function StyleArrow()
+  if af.openxpStyled then return end
+  af.openxpStyled = true
+  af.dialBg = af:CreateTexture(nil, "BACKGROUND")
+  af.dialBg:SetTexture(OXP_TEX .. "dialdisc")
+  af.dialBg:SetVertexColor(16 / 255, 17 / 255, 21 / 255, 0.85)
+  af.dialRing = af:CreateTexture(nil, "BORDER")
+  af.dialRing:SetTexture(OXP_TEX .. "dialring")
+  af.arrived = af:CreateTexture(nil, "OVERLAY")
+  af.arrived:SetTexture(OXP_TEX .. "check")
+  OXPTint(af.arrived, OXP_C.green)
+  af.arrived:Hide()
+  af.text:SetAlpha(0)
+  af.oxpDist = af:CreateFontString(nil, "OVERLAY")
+  af.oxpDist:SetFont("Fonts\\ARIALN.TTF", 17, "OUTLINE")
+  af.oxpLabel = af:CreateFontString(nil, "OVERLAY")
+  af.oxpLabel:SetFont("Fonts\\ARIALN.TTF", 12, "OUTLINE")
+  af.oxpLabel:SetTextColor(0.72, 0.74, 0.8, 1)
+end
+
+-- The colour/text half of card.ArrowUpdate (OpenXPCard.lua:2261-2288):
+-- OpenXP's own per-frame repaint, following the arrived state. Reused by
+-- HARNESS.ApplyOpenXPLook so refresh calls reset the dial to OpenXP's look.
+local function ArrowPaintOpenXP()
+  if not af.oxpDist then return end
+  local dist = af.distance or 0
+  local element = af.oxpVia or af.element
+  local here = element and dist <= 8
+  if here then
+    af.texture:Hide()
+    af.arrived:Show()
+    OXPTint(af.dialRing, OXP_C.green)
+    af.oxpDist:SetText("Here")
+    af.oxpDist:SetTextColor(OXP_C.green[1], OXP_C.green[2], OXP_C.green[3], 1)
+  else
+    af.texture:Show()
+    af.arrived:Hide()
+    OXPTint(af.dialRing, OXP_C.blue, 0.6)
+    af.oxpDist:SetText(string.format("%d yd", dist))
+    af.oxpDist:SetTextColor(0.96, 0.97, 0.98, 1)
+  end
+  af.oxpLabel:SetText(element and element.title or "")
+end
+
+-- The OnUpdate handler OpenXP installs on the arrow frame (card.TimedArrow).
+local function ArrowUpdate(self)
+  bump("ArrowUpdate")
+  local a = HARNESS.openxp
+  if a and a.DrawArrow then a.DrawArrow(self) end
+  ArrowPaintOpenXP()
+end
 
 -- Quest Targets (phase 1) ---------------------------------------------------
 local tf = CreateFrame("Frame", "RXPTargetFrame", UIParent, "BackdropTemplate")
@@ -99,6 +185,8 @@ end
 function HARNESS.ApplyOpenXPLook()
   applyOpenXPLook(N("OpenXPCard"), N("OpenXPCard").header.zone)
   applyOpenXPLook(N("RXPG_ARROW"), N("RXPG_ARROW").text)
+  -- The dial/text repaint card.ArrowUpdate does (once the card styled it).
+  ArrowPaintOpenXP()
   applyOpenXPLook(N("RXPTargetFrame"), N("RXPTargetFrame_title").text)
   -- UpdateTargetFrame rebuilds the secure target rows, restyling them too.
   applyOpenXPLook(N("RXPTargetFrame_EnemyButton1"), N("RXPTargetFrame_EnemyButton1").label)
@@ -144,13 +232,16 @@ addon.card = {
   SkinPanel = function(_, f) bump("card.SkinPanel"); if f then applyOpenXPLook(f.__raw or f) end end,
   ApplyFonts = function()
     bump("card.ApplyFonts")
-    local function refont(fs)
-      fs:SetFont("Fonts\\ARIALN.TTF", 12, "OUTLINE")
+    local function refont(fs, size)
+      if not fs then return end
+      fs:SetFont("Fonts\\ARIALN.TTF", size, "OUTLINE")
       fs:SetShadowOffset(0, 0)
     end
-    refont(N("OpenXPCard").header.zone)
-    refont(N("RXPG_ARROW").text)
-    refont(N("RXPTargetFrame_title").text)
+    refont(N("OpenXPCard").header.zone, 12)
+    refont(N("RXPG_ARROW").text, 12)
+    refont(N("RXPG_ARROW").oxpDist, 17)
+    refont(N("RXPG_ARROW").oxpLabel, 12)
+    refont(N("RXPTargetFrame_title").text, 12)
   end,
 }
 
@@ -184,13 +275,22 @@ end
 
 function addon.SetupArrow()
   bump("SetupArrow")
-  af.texture:SetTexture("Interface\\AddOns\\OpenXP\\Textures\\Card\\pointer")
+  af.text:SetFont("Fonts\\ARIALN.TTF", 9, "OUTLINE")
+  af:UpdateVisuals()
   applyOpenXPLook(nil, af.text)
+  -- The card wraps addon.SetupArrow and runs card.SetupArrow, which styles
+  -- the arrow once and re-points OnUpdate at card.TimedArrow (ArrowUpdate).
+  StyleArrow()
+  af:SetScript("OnUpdate", ArrowUpdate)
 end
 
 af.UpdateVisuals = function()
   bump("arrowFrame.UpdateVisuals")
   af.texture:SetTexture("Interface\\AddOns\\OpenXP\\Textures\\Card\\pointer")
+end
+
+addon.DrawArrow = function(self)
+  bump("DrawArrow")
 end
 
 -- LibStub AceAddon-3.0 shim serving the fake addon table.
@@ -204,3 +304,14 @@ HARNESS.libs["AceAddon-3.0"] = {
 HARNESS.openxp = addon
 _G.RXPGuides = {}
 HARNESS.addonMetadata["OpenXP"] = { Title = "OpenXP", Version = HARNESS.openxpVersion }
+
+-- addon:OnInitialize calls addon.SetupArrow() (RXPGuides.lua:1572) — the
+-- card's wrapper styles the dial and installs the per-frame update.
+addon.SetupArrow()
+
+-- Advance the arrow by one frame: run whatever OnUpdate script OpenXP (or a
+-- skin under test) currently has installed, exactly like the client would.
+function HARNESS.ArrowTick()
+  local script = af:GetScript("OnUpdate")
+  if script then script(af, 1 / 60) end
+end
