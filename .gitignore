@@ -13,6 +13,7 @@
 # Generated artifacts (scripts/build.sh writes here)
 /dist/
 /build/
+/tests/output/
 *.zip
 
 # Editor and operating-system files
