@@ -1234,5 +1234,97 @@ class ItemUpgradesWindows(unittest.TestCase):
                              f"{f}:{m} was called by the skin")
 
 
+class InventoryManagerWindow(unittest.TestCase):
+    """Ticket #8 (story 16): the shipped inventory-manager skin. OpenXP has
+    no visible window here — an invisible keybind button, an input-propagation
+    helper frame and a hidden full-screen click passthrough — so only the
+    helper frame is dressed; the passthrough must never get a backdrop (it
+    would flash on screen while it catches the delete click)."""
+
+    def test_delete_junk_frame_gets_flareui_backdrop_after_login(self):
+        env = Env()
+        env.boot()
+        self.assertEqual(env.run("return RXPDeleteJunk.backdrop.edgeFile"), FLAREUI_EDGE)
+        self.assertEqual(env.run("return RXPDeleteJunk.backdrop.edgeSize"), 16)
+        self.assertEqual(env.run(
+            "local r,g,b,a = RXPDeleteJunk:GetBackdropBorderColor(); return r,g,b,a"),
+            (0.65, 0.49, 0.27, 1.0))
+        self.assertEqual(env.run(
+            "local r,g,b,a = RXPDeleteJunk:GetBackdropColor(); return r,g,b,a"),
+            (1.0, 1.0, 1.0, 0.6))
+        self.assertEqual(env.chat(), [])
+
+    def test_invisible_helpers_never_get_visual_changes(self):
+        env = Env()
+        helpers = ("RXPInventory_DeleteJunk", "RXPJunkHandler")
+        visual = ("SetBackdrop", "SetBackdropColor", "SetBackdropBorderColor",
+                  "SetFont", "SetTextColor", "SetTexture", "SetColorTexture",
+                  "SetVertexColor", "Show")
+        before = {(f, m): env.calls_made_on(f, m) for f in helpers for m in visual}
+        env.boot()
+        env.run("HARNESS.openxp:RenderFrame()")
+        for (f, m), count in before.items():
+            self.assertEqual(env.calls_made_on(f, m), count, f"{f}:{m} was called")
+        # The passthrough stays hidden and the keybind still fires.
+        self.assertEqual(env.run("return RXPJunkHandler:IsShown()"), False)
+        self.assertEqual(env.openxp_calls("RXPInventory_DeleteJunk click"), 0)
+        env.run("RXPInventory_DeleteJunk:Click()")
+        self.assertEqual(env.openxp_calls("RXPInventory_DeleteJunk click"), 1)
+
+    def test_skin_wins_after_every_openxp_refresh(self):
+        for call in ("HARNESS.openxp:RenderFrame()", "HARNESS.openxp:ReloadTheme()",
+                     "HARNESS.openxp.card.SkinPanels()"):
+            with self.subTest(call=call):
+                env = Env()
+                env.boot()
+                env.run(call)
+                self.assertEqual(env.run("return RXPDeleteJunk.backdrop.edgeFile"),
+                                 FLAREUI_EDGE)
+                self.assertEqual(env.chat(), [])
+
+    def test_per_window_switch_off_leaves_the_frame_untouched(self):
+        env = Env(db={"windows": {"inventory": False}})
+        env.boot()
+        env.run("HARNESS.openxp:RenderFrame()")
+        self.assertEqual(env.run("return RXPDeleteJunk.backdrop.edgeFile"), OPENXP_EDGE)
+        env.slash("/oxpfui debug")
+        self.assertIn("window 'inventory' is switched off", "\n".join(env.chat()))
+
+    def test_master_switch_off_leaves_the_frame_untouched(self):
+        env = Env(db={"enabled": False})
+        env.boot()
+        env.run("HARNESS.openxp:RenderFrame()")
+        self.assertEqual(env.run("return RXPDeleteJunk.backdrop.edgeFile"), OPENXP_EDGE)
+        self.assertEqual(env.chat(), [])
+
+    def test_missing_frames_are_skipped_quietly_without_errors(self):
+        env = Env()
+        env.run("""
+          _G.RXPInventory_DeleteJunk = nil
+          _G.RXPDeleteJunk = nil
+          _G.RXPJunkHandler = nil
+          HARNESS.openxp.inventoryManager = nil
+        """)
+        env.boot()
+        env.run("HARNESS.openxp:RenderFrame()")
+        self.assertEqual(env.chat(), [])
+        env.slash("/oxpfui debug")
+        report = "\n".join(env.chat())
+        self.assertIn("missing frame RXPDeleteJunk", report)
+        self.assertIn("Errors: none", report)
+
+    def test_no_position_or_size_is_ever_changed(self):
+        env = Env()
+        layout = ("SetPoint", "SetSize", "SetWidth", "SetHeight", "SetScale",
+                  "SetAllPoints", "ClearAllPoints")
+        family = ("RXPDeleteJunk", "RXPInventory_DeleteJunk", "RXPJunkHandler")
+        before = {(f, m): env.calls_made_on(f, m) for f in family for m in layout}
+        env.boot()
+        env.run("HARNESS.openxp:RenderFrame()")
+        for (f, m), count in before.items():
+            self.assertEqual(env.calls_made_on(f, m), count,
+                             f"{f}:{m} was called by the skin")
+
+
 if __name__ == "__main__":
     unittest.main()

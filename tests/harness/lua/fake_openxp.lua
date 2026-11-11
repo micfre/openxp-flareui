@@ -207,6 +207,19 @@ comparisonTip.TextLeft1 = comparisonTip:CreateFontString(
 comparisonTip.TextRight1 = comparisonTip:CreateFontString(
   "RXPItemUpgradesComparisonTextRight1", nil, nil, "GameTooltipText")
 
+-- Inventory manager (phase 2, ticket 8) ----------------------------------------
+-- Mirrors InventoryManager.lua 85-143: no visible window exists — an
+-- invisible keybind button, an input-propagation helper frame and a hidden
+-- full-screen click passthrough (BACKGROUND strata, shown only while it
+-- catches the delete-junk click).
+local deleteJunkButton = CreateFrame("Button", "RXPInventory_DeleteJunk")
+deleteJunkButton:SetScript("OnClick", function() bump("RXPInventory_DeleteJunk click") end)
+local deleteJunkFrame = CreateFrame("Frame", "RXPDeleteJunk", UIParent)
+local junkHandler = CreateFrame("Frame", "RXPJunkHandler", UIParent)
+junkHandler:SetAllPoints(UIParent)
+junkHandler:SetFrameStrata("BACKGROUND")
+junkHandler:Hide()
+
 -- EXCLUDED frames (must never be touched by OXP-FUI) ------------------------
 local rxpFrame = CreateFrame("Frame", "RXPFrame", UIParent, "BackdropTemplate")
 CreateFrame("Frame", "RXPFrame_bottomFrame", rxpFrame)
@@ -334,6 +347,10 @@ function HARNESS.ApplyOpenXPLook()
     end
   end
   applyOpenXPLook(N("RXPItemUpgradesComparison"))
+  -- Inventory manager: harness stand-in — OpenXP shows no backdrop anywhere
+  -- here; the charcoal backdrop on the helper frame gives tests an
+  -- observable OpenXP state for the one frame OXP-FUI dresses.
+  applyOpenXPLook(N("RXPDeleteJunk"))
 end
 
 HARNESS.ApplyOpenXPLook()
@@ -421,6 +438,11 @@ addon.talents = {
   menuFrame = talentsMenu,
 }
 addon.itemUpgrades = {}
+addon.inventoryManager = {
+  deleteJunkButton = deleteJunkButton,
+  DeleteJunkFrame = deleteJunkFrame,
+  clickFrame = junkHandler,
+}
 
 function addon.RenderFrame(_, themeUpdate, isLoading)
   bump("RenderFrame")

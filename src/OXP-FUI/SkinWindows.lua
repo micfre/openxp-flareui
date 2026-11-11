@@ -106,6 +106,24 @@ OXPFUI.RegisterSkin{
 }
 
 -- ---------------------------------------------------------------------------
+-- Inventory manager
+-- ---------------------------------------------------------------------------
+
+OXPFUI.RegisterSkin{
+  name = "inventory",
+  windows = { "inventory" },
+  Apply = function(ctx)
+    -- No visible window exists (InventoryManager.lua): dress the helper
+    -- frame so it matches if OpenXP ever shows it. The invisible keybind
+    -- button and the hidden full-screen click passthrough are left alone —
+    -- a backdrop on the passthrough would flash on screen while it catches
+    -- the delete click.
+    local f = ctx.Frame("RXPDeleteJunk")
+    if f then theme.ApplyBackdrop(f) end
+  end,
+}
+
+-- ---------------------------------------------------------------------------
 -- Active-item frame
 -- ---------------------------------------------------------------------------
 
