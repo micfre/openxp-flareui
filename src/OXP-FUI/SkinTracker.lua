@@ -43,26 +43,19 @@ local REPORT_CONTAINERS = {
   "sourcesContainer", "teamworkContainer", "extrasContainer",
 }
 
-local function styleText(fs, kind, color)
-  if type(fs) == "table" and fs.SetFont then
-    theme.ApplyFontString(fs, kind)
-    theme.ApplyTextColor(fs, color)
-  end
-end
-
 local function styleReportContainer(c)
   if type(c) ~= "table" then return end
   local h = c.label
   if type(h) == "table" then
-    styleText(h.label, "title", "ZONE")
+    theme.ApplyText(h.label, "title", "ZONE")
     tintBronze(h.left)
     tintBronze(h.right)
   end
   local data = c.data
   if type(data) == "table" then
-    styleText(data.label, "body", "OBJECTIVE")
+    theme.ApplyText(data.label, "body", "OBJECTIVE")
     for _, w in pairs(data) do
-      styleText(type(w) == "table" and w.label or nil, "body", "OBJECTIVE")
+      theme.ApplyText(type(w) == "table" and w.label or nil, "body", "OBJECTIVE")
     end
   end
 end
@@ -78,7 +71,7 @@ OXPFUI.RegisterSkin{
       local title = ctx.Frame("RXPLevelSplits_title")
       if title then
         theme.ApplyBackdrop(title)
-        styleText(title.text, "header", "TITLE")
+        theme.ApplyText(title.text, "header", "TITLE")
         local cog = ctx.Frame("RXPLevelSplits_titleCogwheel")
         if cog and cog.GetNormalTexture then
           tintBronze(cog:GetNormalTexture())
@@ -93,7 +86,7 @@ OXPFUI.RegisterSkin{
       }
       for key, color in pairs(splitColors) do
         local w = f[key]
-        styleText(type(w) == "table" and w.label or nil, "body", color)
+        theme.ApplyText(type(w) == "table" and w.label or nil, "body", color)
       end
     end
 
@@ -109,12 +102,12 @@ OXPFUI.RegisterSkin{
       if type(trackerUi) == "table" then
         local win = ctx.Guard(trackerUi.frame)
         if win then theme.ApplyBackdrop(win) end
-        styleText(trackerUi.titletext, "header", "TITLE")
+        theme.ApplyText(trackerUi.titletext, "header", "TITLE")
         local levelButton = trackerUi.levelButton
-        styleText(type(levelButton) == "table" and levelButton.text or nil,
+        theme.ApplyText(type(levelButton) == "table" and levelButton.text or nil,
           "title", "TITLE")
         local target = trackerUi.target
-        styleText(type(target) == "table" and target.label or nil,
+        theme.ApplyText(type(target) == "table" and target.label or nil,
           "body", "OBJECTIVE")
         for _, key in ipairs(REPORT_CONTAINERS) do
           styleReportContainer(trackerUi[key])

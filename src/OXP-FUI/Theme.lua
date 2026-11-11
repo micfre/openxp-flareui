@@ -128,6 +128,18 @@ function theme.ApplyTextColor(fs, colorName)
   fs:SetTextColor(c[1], c[2], c[3], 1)
 end
 
+-- The canonical "typography + colour" pass over a font string:
+-- ApplyFontString(fs, kind) + ApplyTextColor(fs, colorName) in one call,
+-- nil-safe, so skins can pass OpenXP fields that a version drift may have
+-- renamed or removed (a missing font string is skipped quietly).
+function theme.ApplyText(fs, kind, colorName)
+  if type(fs) == "table" and fs.SetFont then
+    theme.ApplyFontString(fs, kind)
+    theme.ApplyTextColor(fs, colorName)
+  end
+  return fs
+end
+
 -- FlareUI's bronze box-button paint (CreateBoxButton in the tracker) applied
 -- to an existing BackdropTemplate button: hairline bronze border over a
 -- near-black fill, bronze-lit while hovered. OpenXP's own white hover swap

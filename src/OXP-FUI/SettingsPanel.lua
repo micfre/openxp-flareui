@@ -12,11 +12,6 @@ local theme = OXPFUI.theme
 
 local panel -- built lazily on first open
 
-local function applyFont(fs, kind, colorName)
-  theme.ApplyFontString(fs, kind)
-  theme.ApplyTextColor(fs, colorName)
-end
-
 -- Procedural bronze square toggle (FlareUI box button look, simplified):
 -- bronze outline, dark fill, bronze inner square when on, lit on hover.
 local function makeToggle(parent, getDescription)
@@ -58,7 +53,7 @@ end
 local function label(parent, text, kind, colorName)
   local fs = parent:CreateFontString(nil, "OVERLAY")
   fs:SetText(text)
-  applyFont(fs, kind or "body", colorName or "OBJECTIVE")
+  theme.ApplyText(fs, kind or "body", colorName or "OBJECTIVE")
   return fs
 end
 
@@ -79,12 +74,12 @@ local function buildPanel()
   f.title = f:CreateFontString(nil, "OVERLAY")
   f.title:SetPoint("TOPLEFT", f, "TOPLEFT", 10, -8)
   f.title:SetText(L.panelTitle)
-  applyFont(f.title, "header", "TITLE")
+  theme.ApplyText(f.title, "header", "TITLE")
 
   f.subtitle = f:CreateFontString(nil, "OVERLAY")
   f.subtitle:SetPoint("TOPLEFT", f.title, "BOTTOMLEFT", 0, -2)
   f.subtitle:SetText(L.panelSubtitle)
-  applyFont(f.subtitle, "body", "ZONE")
+  theme.ApplyText(f.subtitle, "body", "ZONE")
 
   f.closeBtn = CreateFrame("Button", nil, f)
   f.closeBtn:SetSize(12, 12)
@@ -95,7 +90,7 @@ local function buildPanel()
   f.closeBtn.mark = f.closeBtn:CreateFontString(nil, "OVERLAY")
   f.closeBtn.mark:SetAllPoints(f.closeBtn)
   f.closeBtn.mark:SetText("×")
-  applyFont(f.closeBtn.mark, "body", "OBJECTIVE")
+  theme.ApplyText(f.closeBtn.mark, "body", "OBJECTIVE")
   f.closeBtn:SetScript("OnClick", function() f:Hide() end)
 
   -- Version note (only when installed != tested OpenXP) --------------------
@@ -104,7 +99,7 @@ local function buildPanel()
     f.versionNote = f:CreateFontString(nil, "OVERLAY")
     f.versionNote:SetPoint("TOPLEFT", f.subtitle, "BOTTOMLEFT", 0, -4)
     f.versionNote:SetText(L.versionNote:format(mismatch, OXPFUI.testedOpenXP))
-    applyFont(f.versionNote, "body", "URGENT")
+    theme.ApplyText(f.versionNote, "body", "URGENT")
   end
 
   -- Master switch ---------------------------------------------------------
@@ -162,7 +157,7 @@ local function buildPanel()
   f.fontBtn.text = f.fontBtn:CreateFontString(nil, "OVERLAY")
   f.fontBtn.text:SetAllPoints(f.fontBtn)
   f.fontBtn.text:SetJustifyH("CENTER")
-  applyFont(f.fontBtn.text, "body", "ZONE")
+  theme.ApplyText(f.fontBtn.text, "body", "ZONE")
   f.fontBtn:SetScript("OnClick", function()
     db.font = theme.FONTS[fontIndex() % #theme.FONTS + 1].key
     f.fontBtn.text:SetText(db.font)
@@ -183,7 +178,7 @@ local function buildPanel()
   f.borderBtn.text = f.borderBtn:CreateFontString(nil, "OVERLAY")
   f.borderBtn.text:SetAllPoints(f.borderBtn)
   f.borderBtn.text:SetJustifyH("CENTER")
-  applyFont(f.borderBtn.text, "body", "ZONE")
+  theme.ApplyText(f.borderBtn.text, "body", "ZONE")
   f.borderBtn:SetScript("OnClick", function()
     local current
     for i, k in ipairs(borderKeys) do
@@ -216,7 +211,7 @@ local function buildPanel()
   f.reloadNote = f:CreateFontString(nil, "OVERLAY")
   f.reloadNote:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 10, 10)
   f.reloadNote:SetText(L.reloadNote)
-  applyFont(f.reloadNote, "body", "DIM")
+  theme.ApplyText(f.reloadNote, "body", "DIM")
 
   f:Hide()
   return f

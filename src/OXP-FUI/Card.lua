@@ -50,13 +50,6 @@ local function amberIfBlue(tex, alpha)
   if tex and matches(tex, theme.OXP_BLUE) then setVertex(tex, C.ZONE, alpha) end
 end
 
-local function text(fs, colorName, kind)
-  if fs and fs.SetFont then
-    theme.ApplyFontString(fs, kind or "body")
-    theme.ApplyTextColor(fs, colorName)
-  end
-end
-
 local function isFontString(fs)
   return fs and fs.SetFont and fs.SetTextColor and true or false
 end
@@ -88,7 +81,7 @@ end
 
 local function skinPill(pill, openxp)
   if not pill then return end
-  text(pill.text, "OBJECTIVE", "body")
+  theme.ApplyText(pill.text, "body", "OBJECTIVE")
   local status = pillStatus(pill, openxp)
   if status and status ~= "?" then
     local colorName = PILL_COLORS[status] or "OBJECTIVE"
@@ -118,9 +111,9 @@ end
 -- ---------------------------------------------------------------------------
 
 local function skinHeader(header)
-  text(header.zone, "ZONE", "header")
-  text(header.range, "DIM", "header")
-  text(header.step, "TITLE", "header")
+  theme.ApplyText(header.zone, "header", "ZONE")
+  theme.ApplyText(header.range, "header", "DIM")
+  theme.ApplyText(header.step, "header", "TITLE")
   setVertex(header.dot, C.ZONE)  -- the blue accent dot becomes amber
   -- a bronze square over the "Step n / n" hit-area button, at its right end
   if header.stepBtn then theme.ApplyBoxButtonPaint(header.stepBtn, { offset = { x = 28, y = 0 } }) end
@@ -146,21 +139,21 @@ local function ensureDivider(cardFrame, header)
 end
 
 local function skinHist(hist, openxp)
-  text(hist.label, "ZONE", "title")
-  text(hist.hint, "DIM", "body")
+  theme.ApplyText(hist.label, "title", "ZONE")
+  theme.ApplyText(hist.hint, "body", "DIM")
   for _, row in ipairs(hist.rows or {}) do
     local status = row.status or rowStatus(row, openxp)
     local colorName = PILL_COLORS[status] or "OBJECTIVE"
-    text(row.text, colorName, "body")
-    text(row.num, "DIM", "body")
+    theme.ApplyText(row.text, "body", colorName)
+    theme.ApplyText(row.num, "body", "DIM")
     skinPill(row.pill, openxp)
   end
 end
 
 local function skinBlocks(blocks)
   for _, b in ipairs(blocks or {}) do
-    text(b.title, "TITLE", "title")
-    text(b.num, "DIM", "body")
+    theme.ApplyText(b.title, "title", "TITLE")
+    theme.ApplyText(b.num, "body", "DIM")
     -- travel badges are OpenXP's blue ones: amber, other kinds keep meaning
     amberIfBlue(b.badge and b.badge.fill, 0.16)
     amberIfBlue(b.badge and b.badge.ring)
@@ -172,8 +165,8 @@ local function skinBlocks(blocks)
         local ok, tex = pcall(mark.GetTexture, mark)
         done = ok and type(tex) == "string" and tex:find("check", 1, true) ~= nil
       end
-      text(line.text, done and "OBJECTIVE_DONE" or "OBJECTIVE", "body")
-      text(line.count, "DIM", "body")
+      theme.ApplyText(line.text, "body", done and "OBJECTIVE_DONE" or "OBJECTIVE")
+      theme.ApplyText(line.count, "body", "DIM")
       if done then setVertex(mark, C.TITLE_DONE) end
       amberIfBlue(line.bar)
     end
@@ -181,9 +174,9 @@ local function skinBlocks(blocks)
 end
 
 local function skinUpNext(upNext)
-  text(upNext.label, "ZONE", "title")
+  theme.ApplyText(upNext.label, "title", "ZONE")
   for _, line in ipairs(upNext.lines or {}) do
-    text(line, "OBJECTIVE", "body")
+    theme.ApplyText(line, "body", "OBJECTIVE")
   end
 end
 
@@ -192,7 +185,7 @@ local function skinBar(bar)
                          bar.collapse, bar.find, bar.stop, bar.resume }) do
     if btn then
       theme.ApplyBoxButtonPaint(btn)
-      text(btn.label, "OBJECTIVE", "body")
+      theme.ApplyText(btn.label, "body", "OBJECTIVE")
       if btn.bg and matches(btn.bg, theme.OXP_BLUE) then
         setVertex(btn.bg, C.ZONE, 0.16)  -- labelled buttons' blue wash -> amber
       end
@@ -211,8 +204,8 @@ local function skinXPStrip(xpStrip)
 end
 
 local function skinMini(mini)
-  text(mini.text, "TITLE", "title")
-  text(mini.count, "DIM", "body")
+  theme.ApplyText(mini.text, "title", "TITLE")
+  theme.ApplyText(mini.count, "body", "DIM")
   if mini.expand then theme.ApplyBoxButtonPaint(mini.expand) end
   if mini.badge then
     amberIfBlue(mini.badge.fill, 0.16)
@@ -223,7 +216,7 @@ end
 
 local function skinStepList(list, openxp)
   theme.ApplyBackdrop(list)
-  text(list.title, "TITLE", "header")
+  theme.ApplyText(list.title, "header", "TITLE")
   if list.close then theme.ApplyBoxButtonPaint(list.close) end
   local rows = list.rows or {}
   for _, row in ipairs(rows) do
@@ -233,13 +226,13 @@ local function skinStepList(list, openxp)
       if row.hl and row.hl.SetColorTexture then
         row.hl:SetColorTexture(C.TITLE_FOCUS[1], C.TITLE_FOCUS[2], C.TITLE_FOCUS[3], 0.08)
       end
-      text(row.num, "TITLE_FOCUS", "body")
+      theme.ApplyText(row.num, "body", "TITLE_FOCUS")
     else
       local status = rowStatus(row, openxp)
       colorName = PILL_COLORS[status] or "TITLE"
-      text(row.num, "DIM", "body")
+      theme.ApplyText(row.num, "body", "DIM")
     end
-    text(row.text, colorName, "title")
+    theme.ApplyText(row.text, "title", colorName)
     skinPill(row.pill, openxp)
   end
   -- FlareUI's procedural bronze scrollbar beside the wheel-scrolled list.
