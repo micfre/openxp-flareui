@@ -39,6 +39,16 @@ def _lua_literal(value) -> str:
     raise TypeError(f"cannot render {value!r} as Lua")
 
 
+def _read_toc_metadata(toc_path: pathlib.Path) -> dict:
+    """Parse ## Key: value lines from a TOC file."""
+    meta = {}
+    for line in toc_path.read_text().splitlines():
+        if line.startswith("## "):
+            key, _, value = line[3:].partition(":")
+            meta[key.strip()] = value.strip()
+    return meta
+
+
 class Env:
     """One lupa LuaRuntime = one simulated client with one addon session."""
 
@@ -46,6 +56,11 @@ class Env:
                  db: dict | None = None, load_addon: bool = True):
         self.lua = lupa.LuaRuntime(unpack_returned_tuples=True)
         self._eval_file(str(LUA_DIR / "wow_api.lua"))
+        # Simulate the client reading our TOC metadata (Version/Title).
+        meta = _read_toc_metadata(ADDON_DIR / "OXP-FUI.toc")
+        self.run(f"HARNESS.addonMetadata[{_lua_literal('OXP-FUI')}] = "
+                 f"{{ Title = {_lua_literal(meta.get('Title', 'OXP-FUI'))}, "
+                 f"Version = {_lua_literal(meta.get('Version', 'dev'))} }}")
         if openxp:
             self.run(f"HARNESS.openxpVersion = {_lua_literal(openxp_version)}")
             self._eval_file(str(LUA_DIR / "fake_openxp.lua"))

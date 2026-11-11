@@ -100,6 +100,8 @@ function HARNESS.ApplyOpenXPLook()
   applyOpenXPLook(N("OpenXPCard"), N("OpenXPCard").header.zone)
   applyOpenXPLook(N("RXPG_ARROW"), N("RXPG_ARROW").text)
   applyOpenXPLook(N("RXPTargetFrame"), N("RXPTargetFrame_title").text)
+  -- UpdateTargetFrame rebuilds the secure target rows, restyling them too.
+  applyOpenXPLook(N("RXPTargetFrame_EnemyButton1"), N("RXPTargetFrame_EnemyButton1").label)
   applyOpenXPLook(N("RXPItemFrame"), N("RXPItemFrame_title").text)
   applyOpenXPLook(N("RXPLevelSplits"), N("RXPLevelSplits_title").text)
   applyOpenXPLook(N("OpenXPWelcomeFrame"))

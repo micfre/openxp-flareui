@@ -263,5 +263,141 @@ class LoadsQuietly(unittest.TestCase):
                              f"{frame} was touched while the master switch is off")
 
 
+class RefreshReapply(unittest.TestCase):
+    """OXP-FUI must win over OpenXP's own theme/font/outline settings: every
+    OpenXP refresh/rebuild call re-applies the skins afterwards."""
+
+    REFRESH_CALLS = [
+        "HARNESS.openxp:RenderFrame()",
+        "HARNESS.openxp:ReloadTheme()",
+        "HARNESS.openxp.card.Refresh(nil, true)",
+        "HARNESS.openxp.card.SkinPanels()",
+        "HARNESS.openxp.card.ApplyFonts()",
+        "HARNESS.openxp.targeting:UpdateTargetFrame()",
+        "HARNESS.openxp.targeting:RenderTargetFrameBackground()",
+        "HARNESS.openxp.tracker:UpdateLevelSplits()",
+        "HARNESS.openxp.activeItemFrame.UpdateVisuals()",
+        "HARNESS.openxp.SetupArrow()",
+        "RXPG_ARROW.UpdateVisuals()",
+    ]
+
+    def test_every_openxp_refresh_call_restores_the_skin(self):
+        for call in self.REFRESH_CALLS:
+            with self.subTest(call=call):
+                env = Env()
+                env.install_skins(ARROW_SKIN + CARD_SKIN)
+                env.boot()
+                self.assertEqual(env.run("return RXPG_ARROW.backdrop.edgeFile"),
+                                 "Interface\\AddOns\\OXP-FUI\\Media\\Borders\\FlareUI-Frames.tga")
+                before = env.openxp_calls("RenderFrame")
+                env.run(call)
+                # The refresh ran (hook preserved the original) and OpenXP
+                # restyled its frames back to its own look...
+                self.assertGreaterEqual(env.run(f"return #RXPG_ARROW.__calls"), 1)
+                # ...but OXP-FUI's skin wins again by the time it returns.
+                self.assertEqual(env.run("return RXPG_ARROW.backdrop.edgeFile"),
+                                 "Interface\\AddOns\\OXP-FUI\\Media\\Borders\\FlareUI-Frames.tga",
+                                 f"skin lost after {call}")
+                self.assertEqual(env.run(
+                    "local p,s,f = RXPG_ARROW.text:GetFont(); return p,s,f"),
+                    ("Fonts\\FRIZQT__.TTF", 11, ""),
+                    f"font override lost after {call}")
+
+    def test_hooked_originals_still_run(self):
+        env = Env()
+        env.install_skins(ARROW_SKIN)
+        env.boot()
+        env.run("HARNESS.openxp:RenderFrame()")
+        env.run("HARNESS.openxp:ReloadTheme()")
+        self.assertGreaterEqual(env.openxp_calls("RenderFrame"), 1)
+        self.assertGreaterEqual(env.openxp_calls("ReloadTheme"), 1)
+
+    def test_refresh_before_login_does_nothing(self):
+        env = Env(load_addon=False)
+        env.run("_G.__OXPFUI_NAMESPACE = {}")
+        from harness.env import ADDON_FILES
+        import pathlib
+        for fname in ADDON_FILES:
+            env.run(f"_G.__chunk = assert(loadfile({str(pathlib.Path('src/OXP-FUI') / fname)!r})); "
+                    "_G.__chunk('OXP-FUI', __OXPFUI_NAMESPACE)")
+        env.install_skins(ARROW_SKIN)
+        env.fire("ADDON_LOADED", "OXP-FUI")
+        env.run("HARNESS.openxp:RenderFrame()")
+        self.assertEqual(env.run("return RXPG_ARROW.backdrop.edgeFile"),
+                         "Interface\\Buttons\\WHITE8X8")
+
+
+class CombatDeferral(unittest.TestCase):
+    def test_secure_skin_defers_in_combat_and_applies_after_combat_ends(self):
+        env = Env()
+        env.install_skins(SECURE_SKIN)
+        env.set_combat(True)
+        env.boot()
+        # Deferred: the secure button keeps OpenXP's look while in combat.
+        self.assertEqual(env.run("return RXPTargetFrame_EnemyButton1.backdrop.edgeFile"),
+                         "Interface\\Buttons\\WHITE8X8")
+        env.slash("/oxpfui debug")
+        self.assertIn("in combat", "\n".join(env.chat()))
+        env.chat()  # drain
+        env.set_combat(False)
+        env.fire("PLAYER_REGEN_ENABLED")
+        self.assertEqual(env.run("return RXPTargetFrame_EnemyButton1.backdrop.edgeFile"),
+                         "Interface\\AddOns\\OXP-FUI\\Media\\Borders\\FlareUI-Frames.tga")
+
+    def test_secure_skin_redoes_deferred_reapply_after_combat(self):
+        env = Env()
+        env.install_skins(SECURE_SKIN)
+        env.boot()
+        self.assertEqual(env.run("return RXPTargetFrame_EnemyButton1.backdrop.edgeFile"),
+                         "Interface\\AddOns\\OXP-FUI\\Media\\Borders\\FlareUI-Frames.tga")
+        env.set_combat(True)
+        # OpenXP rebuilds the frame look mid-combat: re-apply is deferred...
+        env.run("HARNESS.openxp:RenderFrame()")
+        self.assertEqual(env.run("return RXPTargetFrame_EnemyButton1.backdrop.edgeFile"),
+                         "Interface\\Buttons\\WHITE8X8")
+        # ...and flushed when combat ends.
+        env.set_combat(False)
+        env.fire("PLAYER_REGEN_ENABLED")
+        self.assertEqual(env.run("return RXPTargetFrame_EnemyButton1.backdrop.edgeFile"),
+                         "Interface\\AddOns\\OXP-FUI\\Media\\Borders\\FlareUI-Frames.tga")
+
+    def test_insecure_skin_applies_even_in_combat(self):
+        env = Env()
+        env.install_skins(ARROW_SKIN)
+        env.set_combat(True)
+        env.boot()
+        self.assertEqual(env.run("return RXPG_ARROW.backdrop.edgeFile"),
+                         "Interface\\AddOns\\OXP-FUI\\Media\\Borders\\FlareUI-Frames.tga")
+
+
+class VersionNote(unittest.TestCase):
+    def test_debug_report_shows_versions_and_no_note_when_matching(self):
+        env = Env(openxp_version="1.3.48")
+        env.install_skins(ARROW_SKIN)
+        env.boot()
+        env.slash("/oxpfui debug")
+        report = "\n".join(env.chat())
+        self.assertIn("1.3.48", report)
+        self.assertNotIn("differs", report)
+
+    def test_debug_report_notes_version_mismatch(self):
+        env = Env(openxp_version="1.3.40")
+        env.install_skins(ARROW_SKIN)
+        env.boot()
+        env.slash("/oxpfui debug")
+        report = "\n".join(env.chat())
+        self.assertIn("1.3.40", report)
+        self.assertIn("differs", report)
+
+    def test_missing_openxp_is_reported_and_quiet(self):
+        env = Env(openxp=False)
+        env.install_skins(ARROW_SKIN)
+        env.boot()
+        self.assertEqual(env.chat(), [])
+        self.assertIsNone(env.run("return _G.RXPG_ARROW"))  # no OpenXP at all
+        env.slash("/oxpfui debug")
+        self.assertIn("OpenXP was not found", "\n".join(env.chat()))
+
+
 if __name__ == "__main__":
     unittest.main()

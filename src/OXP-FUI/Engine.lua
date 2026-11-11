@@ -382,13 +382,11 @@ function OXPFUI.DebugReport()
   lines[#lines + 1] = L.debugPasses:format(state.passes, state.lastReason)
 
   -- Per-skin outcome of the latest pass.
-  local lastBySkin = {}
-  for _, e in ipairs(logEntries) do
-    if e.skin then lastBySkin[e.skin] = e end
-  end
   local skips, errs = {}, {}
   for _, e in ipairs(logEntries) do
-    if e.type == "skip" then skips[#skips + 1] = e.skin .. " — " .. e.info end
+    if e.type == "skip" or e.type == "deferred" then
+      skips[#skips + 1] = e.skin .. " — " .. e.info
+    end
     if e.type == "error" then errs[#errs + 1] = e.skin .. " — " .. e.info end
   end
   lines[#lines + 1] = L.debugSkipped:format(#skips > 0 and table.concat(skips, "; ") or L.debugNone)
