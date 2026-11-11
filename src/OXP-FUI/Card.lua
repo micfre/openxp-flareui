@@ -14,13 +14,6 @@ local ADDON_NAME, OXPFUI = ...
 local theme = OXPFUI.theme
 local C = theme.C
 
--- Guarded frames carry the raw frame in .__raw (see Engine.lua): chrome
--- textures created here must be parented and anchored to the real frame.
-local function raw(frame)
-  if type(frame) ~= "table" then return nil end
-  return frame.__raw or frame
-end
-
 local function fields(obj, ...)
   if type(obj) ~= "table" then return false end
   for i = 1, select("#", ...) do
@@ -29,16 +22,14 @@ local function fields(obj, ...)
   return true
 end
 
--- OpenXP's own blue accent (90/255, 184/255, 1) becomes FlareUI amber.
-local OXP_BLUE = { 90 / 255, 184 / 255, 1 }
+-- OpenXP's blue label accent (a lighter blue it uses on button icons) also
+-- becomes amber; the main accent blue itself is theme.OXP_BLUE.
 local OXP_BLUE_LABEL = { 159 / 255, 212 / 255, 1 }
-
-local function near(a, b) return math.abs(a - b) < 0.01 end
 
 local function matches(tex, triple)
   local ok, r, g, b = pcall(tex.GetVertexColor, tex)
   if not ok or r == nil then return false end
-  return near(r, triple[1]) and near(g, triple[2]) and near(b, triple[3])
+  return theme.NearColor(r, g, b, triple)
 end
 
 local function setVertex(tex, triple, a)
@@ -49,22 +40,18 @@ end
 
 -- Re-tint a texture only while OpenXP still has it in the blue accent.
 local function amberIfBlue(tex, alpha)
-  if tex and matches(tex, OXP_BLUE) then setVertex(tex, C.ZONE, alpha) end
-end
-
-local function text(fs, colorName, kind)
-  if fs and fs.SetFont then
-    theme.ApplyFontString(fs, kind or "body")
-    theme.ApplyTextColor(fs, colorName)
-  end
+  if tex and matches(tex, theme.OXP_BLUE) then setVertex(tex, C.ZONE, alpha) end
 end
 
 local function isFontString(fs)
   return fs and fs.SetFont and fs.SetTextColor and true or false
 end
 
--- A step list / history row's status, using OpenXP's own logic when it is
--- reachable and falling back to whatever the frames themselves show.
+-- A step row's / history row's status colour, from OpenXP's own status
+-- keys; PILL_COLORS encodes the status -> palette mapping once for the
+-- step pills, the history rows and the step-list rows (default varies by
+-- caller). A row's status uses OpenXP's own logic when it is reachable
+-- and falls back to whatever the frames themselves show.
 local PILL_COLORS = {
   done = "TITLE_DONE",
   skipped = "OBJECTIVE_DONE",
@@ -87,7 +74,7 @@ end
 
 local function skinPill(pill, openxp)
   if not pill then return end
-  text(pill.text, "OBJECTIVE", "body")
+  theme.ApplyText(pill.text, "body", "OBJECTIVE")
   local status = pillStatus(pill, openxp)
   if status and status ~= "?" then
     local colorName = PILL_COLORS[status] or "OBJECTIVE"
@@ -117,9 +104,9 @@ end
 -- ---------------------------------------------------------------------------
 
 local function skinHeader(header)
-  text(header.zone, "ZONE", "header")
-  text(header.range, "DIM", "header")
-  text(header.step, "TITLE", "header")
+  theme.ApplyText(header.zone, "header", "ZONE")
+  theme.ApplyText(header.range, "header", "DIM")
+  theme.ApplyText(header.step, "header", "TITLE")
   setVertex(header.dot, C.ZONE)  -- the blue accent dot becomes amber
   -- a bronze square over the "Step n / n" hit-area button, at its right end
   if header.stepBtn then theme.ApplyBoxButtonPaint(header.stepBtn, { offset = { x = 28, y = 0 } }) end
@@ -128,8 +115,8 @@ end
 -- FlareUI's header band: a divider texture right under OpenXP's header.
 -- Own texture, anchored to the header; the header itself never moves.
 local function ensureDivider(cardFrame, header)
-  local rf = raw(cardFrame)
-  local hf = raw(header)
+  local rf = theme.RealFrame(cardFrame)
+  local hf = theme.RealFrame(header)
   if not (rf and rf.CreateTexture and hf) then return end
   local t = rf.oxpfuiDivider
   if not t then
@@ -145,24 +132,21 @@ local function ensureDivider(cardFrame, header)
 end
 
 local function skinHist(hist, openxp)
-  text(hist.label, "ZONE", "title")
-  text(hist.hint, "DIM", "body")
+  theme.ApplyText(hist.label, "title", "ZONE")
+  theme.ApplyText(hist.hint, "body", "DIM")
   for _, row in ipairs(hist.rows or {}) do
     local status = row.status or rowStatus(row, openxp)
-    local colorName = "OBJECTIVE"
-    if status == "done" then colorName = "TITLE_DONE"
-    elseif status == "skipped" then colorName = "OBJECTIVE_DONE"
-    elseif status == "chain" then colorName = "TITLE" end
-    text(row.text, colorName, "body")
-    text(row.num, "DIM", "body")
+    local colorName = PILL_COLORS[status] or "OBJECTIVE"
+    theme.ApplyText(row.text, "body", colorName)
+    theme.ApplyText(row.num, "body", "DIM")
     skinPill(row.pill, openxp)
   end
 end
 
 local function skinBlocks(blocks)
   for _, b in ipairs(blocks or {}) do
-    text(b.title, "TITLE", "title")
-    text(b.num, "DIM", "body")
+    theme.ApplyText(b.title, "title", "TITLE")
+    theme.ApplyText(b.num, "body", "DIM")
     -- travel badges are OpenXP's blue ones: amber, other kinds keep meaning
     amberIfBlue(b.badge and b.badge.fill, 0.16)
     amberIfBlue(b.badge and b.badge.ring)
@@ -174,8 +158,8 @@ local function skinBlocks(blocks)
         local ok, tex = pcall(mark.GetTexture, mark)
         done = ok and type(tex) == "string" and tex:find("check", 1, true) ~= nil
       end
-      text(line.text, done and "OBJECTIVE_DONE" or "OBJECTIVE", "body")
-      text(line.count, "DIM", "body")
+      theme.ApplyText(line.text, "body", done and "OBJECTIVE_DONE" or "OBJECTIVE")
+      theme.ApplyText(line.count, "body", "DIM")
       if done then setVertex(mark, C.TITLE_DONE) end
       amberIfBlue(line.bar)
     end
@@ -183,9 +167,9 @@ local function skinBlocks(blocks)
 end
 
 local function skinUpNext(upNext)
-  text(upNext.label, "ZONE", "title")
+  theme.ApplyText(upNext.label, "title", "ZONE")
   for _, line in ipairs(upNext.lines or {}) do
-    text(line, "OBJECTIVE", "body")
+    theme.ApplyText(line, "body", "OBJECTIVE")
   end
 end
 
@@ -194,8 +178,8 @@ local function skinBar(bar)
                          bar.collapse, bar.find, bar.stop, bar.resume }) do
     if btn then
       theme.ApplyBoxButtonPaint(btn)
-      text(btn.label, "OBJECTIVE", "body")
-      if btn.bg and matches(btn.bg, OXP_BLUE) then
+      theme.ApplyText(btn.label, "body", "OBJECTIVE")
+      if btn.bg and matches(btn.bg, theme.OXP_BLUE) then
         setVertex(btn.bg, C.ZONE, 0.16)  -- labelled buttons' blue wash -> amber
       end
       if btn.icon and matches(btn.icon, OXP_BLUE_LABEL) then
@@ -207,14 +191,14 @@ end
 
 local function skinXPStrip(xpStrip)
   -- rested XP is drawn in the blue accent: amber keeps the meaning
-  if xpStrip and xpStrip.rested and matches(xpStrip.rested, OXP_BLUE) then
+  if xpStrip and xpStrip.rested and matches(xpStrip.rested, theme.OXP_BLUE) then
     setVertex(xpStrip.rested, C.ZONE, 0.35)
   end
 end
 
 local function skinMini(mini)
-  text(mini.text, "TITLE", "title")
-  text(mini.count, "DIM", "body")
+  theme.ApplyText(mini.text, "title", "TITLE")
+  theme.ApplyText(mini.count, "body", "DIM")
   if mini.expand then theme.ApplyBoxButtonPaint(mini.expand) end
   if mini.badge then
     amberIfBlue(mini.badge.fill, 0.16)
@@ -225,7 +209,7 @@ end
 
 local function skinStepList(list, openxp)
   theme.ApplyBackdrop(list)
-  text(list.title, "TITLE", "header")
+  theme.ApplyText(list.title, "header", "TITLE")
   if list.close then theme.ApplyBoxButtonPaint(list.close) end
   local rows = list.rows or {}
   for _, row in ipairs(rows) do
@@ -235,15 +219,13 @@ local function skinStepList(list, openxp)
       if row.hl and row.hl.SetColorTexture then
         row.hl:SetColorTexture(C.TITLE_FOCUS[1], C.TITLE_FOCUS[2], C.TITLE_FOCUS[3], 0.08)
       end
-      text(row.num, "TITLE_FOCUS", "body")
+      theme.ApplyText(row.num, "body", "TITLE_FOCUS")
     else
       local status = rowStatus(row, openxp)
-      if status == "done" then colorName = "TITLE_DONE"
-      elseif status == "skipped" then colorName = "OBJECTIVE_DONE"
-      elseif status == "chain" then colorName = "TITLE" end
-      text(row.num, "DIM", "body")
+      colorName = PILL_COLORS[status] or "TITLE"
+      theme.ApplyText(row.num, "body", "DIM")
     end
-    text(row.text, colorName, "title")
+    theme.ApplyText(row.text, "title", colorName)
     skinPill(row.pill, openxp)
   end
   -- FlareUI's procedural bronze scrollbar beside the wheel-scrolled list.
@@ -267,7 +249,7 @@ local function Apply(ctx)
   if not f then return end
   local openxp = ctx.OpenXP()
   local cardModule = openxp and openxp.card or nil
-  local rf = raw(f)
+  local rf = theme.RealFrame(f)
 
   -- Bronze border art + warm near-black fill at the panel opacity setting.
   theme.ApplyBackdrop(f)

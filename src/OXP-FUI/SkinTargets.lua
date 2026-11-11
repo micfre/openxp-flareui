@@ -36,14 +36,8 @@ local function StyleRow(ctx, raw)
     local c = theme.C.ZONE -- bronze accent, like every FlareUI strip
     btn.bar:SetColorTexture(c[1], c[2], c[3], 1)
   end
-  if type(btn.label) == "table" and btn.label.SetFont then
-    theme.ApplyFontString(btn.label, "body")
-    theme.ApplyTextColor(btn.label, "OBJECTIVE")
-  end
-  if type(btn.key) == "table" and btn.key.SetFont then
-    theme.ApplyFontString(btn.key, "body")
-    theme.ApplyTextColor(btn.key, "DIM")
-  end
+  theme.ApplyText(btn.label, "body", "OBJECTIVE")
+  theme.ApplyText(btn.key, "body", "DIM")
 end
 
 OXPFUI.RegisterSkin{
@@ -56,13 +50,9 @@ OXPFUI.RegisterSkin{
 
     local title = ctx.Frame("RXPTargetFrame_title")
     if title then
-      if title.text then
-        theme.ApplyFontString(title.text, "header")
-        theme.ApplyTextColor(title.text, "TITLE")
-      end
+      theme.ApplyTitleStrip(title)
       if title.keyHint then
-        theme.ApplyFontString(title.keyHint, "body")
-        theme.ApplyTextColor(title.keyHint, "DIM")
+        theme.ApplyText(title.keyHint, "body", "DIM")
       end
     end
 
@@ -73,10 +63,7 @@ OXPFUI.RegisterSkin{
     if type(tf) ~= "table" then return end
     if type(tf.sections) == "table" then
       for _, fs in pairs(tf.sections) do
-        if type(fs) == "table" and fs.SetFont then
-          theme.ApplyFontString(fs, "title")
-          theme.ApplyTextColor(fs, "ZONE")
-        end
+        theme.ApplyText(fs, "title", "ZONE")
       end
     end
     for _, listName in ipairs({ "enemyTargetButtons", "friendlyTargetButtons" }) do

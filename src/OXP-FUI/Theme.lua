@@ -27,6 +27,23 @@ theme.C = {
                                      -- used where a plain texture is tinted
 }
 
+-- OpenXP's own blue accent (90/255, 184/255, 1 — its COLORS tables and the
+-- card art it tints), retinted to FlareUI amber/bronze by the card and the
+-- welcome/feedback skins. One shared definition — with one shared
+-- near-match tolerance — so every skin agrees what counts as "OpenXP blue".
+theme.OXP_BLUE = { 90 / 255, 184 / 255, 1 }
+
+-- Near-match tolerance when comparing a vertex/text colour against a
+-- palette triple: the palettes are set as exact constants, so this only
+-- absorbs float noise.
+local COLOR_EPS = 1 / 64
+
+function theme.NearColor(r, g, b, target)
+  return math.abs(r - target[1]) <= COLOR_EPS
+    and math.abs(g - target[2]) <= COLOR_EPS
+    and math.abs(b - target[3]) <= COLOR_EPS
+end
+
 -- Typography: header 13 / title 12 / body 11, no outline, 1px black shadow.
 theme.FONT_SIZES = { header = 13, title = 12, body = 11 }
 
@@ -58,14 +75,23 @@ theme.BORDERS = {
 }
 theme.DEFAULT_BORDER = "Frames"
 
+-- Panel fill opacity from settings; every backdrop recipe shares this
+-- default for a missing/non-numeric value.
+local DEFAULT_OPACITY = 0.6
+
+local function panelOpacity(db)
+  local opacity = db.opacity
+  if type(opacity) ~= "number" then opacity = DEFAULT_OPACITY end
+  return opacity
+end
+
 -- The tracker backdrop recipe: Blizzard's dark dialog fill (a warm near-black
 -- vertical gradient), FlareUI border art, insets 3, bronze tint, panel
 -- opacity from settings. Appearance only — callers never resize the frame.
 function theme.ApplyBackdrop(frame)
   local db = OXPFUI.db or {}
   local border = theme.BORDERS[db.borderStyle] or theme.BORDERS[theme.DEFAULT_BORDER]
-  local opacity = db.opacity
-  if type(opacity) ~= "number" then opacity = 0.6 end
+  local opacity = panelOpacity(db)
   frame:SetBackdrop({
     bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background-Dark",
     edgeFile = border.file,
@@ -84,8 +110,7 @@ end
 -- of drawing a second border inside it.
 function theme.ApplyPanelFill(frame)
   local db = OXPFUI.db or {}
-  local opacity = db.opacity
-  if type(opacity) ~= "number" then opacity = 0.6 end
+  local opacity = panelOpacity(db)
   frame:SetBackdrop({
     bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background-Dark",
     edgeFile = nil,
@@ -93,6 +118,16 @@ function theme.ApplyPanelFill(frame)
     insets = { left = 3, right = 3, top = 3, bottom = 3 },
   })
   frame:SetBackdropColor(1, 1, 1, opacity)
+end
+
+-- OpenXP's title strips (the X_title frames): their .text becomes a
+-- FlareUI gold header. Nil-safe, like ApplyText. The strip frame itself —
+-- border art (ApplyBackdrop), panel fill (ApplyPanelFill) or nothing — is
+-- styled by the caller, because the skins differ there.
+function theme.ApplyTitleStrip(frame)
+  if type(frame) == "table" then
+    theme.ApplyText(frame.text, "header", "TITLE")
+  end
 end
 
 -- Apply the FlareUI typography to a font string: chosen face, size for its
@@ -109,6 +144,18 @@ end
 function theme.ApplyTextColor(fs, colorName)
   local c = theme.C[colorName] or theme.C.OBJECTIVE
   fs:SetTextColor(c[1], c[2], c[3], 1)
+end
+
+-- The canonical "typography + colour" pass over a font string:
+-- ApplyFontString(fs, kind) + ApplyTextColor(fs, colorName) in one call,
+-- nil-safe, so skins can pass OpenXP fields that a version drift may have
+-- renamed or removed (a missing font string is skipped quietly).
+function theme.ApplyText(fs, kind, colorName)
+  if type(fs) == "table" and fs.SetFont then
+    theme.ApplyFontString(fs, kind)
+    theme.ApplyTextColor(fs, colorName)
+  end
+  return fs
 end
 
 -- FlareUI's bronze box-button paint (CreateBoxButton in the tracker) applied
@@ -144,7 +191,7 @@ end
 
 -- Unwrap an engine-guarded frame to the real frame, so chrome textures are
 -- parented and anchored to the frame the client knows (see Engine.lua).
-local function realFrame(frame)
+function theme.RealFrame(frame)
   if type(frame) ~= "table" then return nil end
   return frame.__raw or frame
 end
@@ -157,7 +204,7 @@ end
 --                 (0..1 of the list that fits), scrollable (bool)
 -- Re-applied chrome is reused; nothing is resized except our own textures.
 function theme.ApplyScrollBar(frame, opts)
-  local rf = realFrame(frame)
+  local rf = theme.RealFrame(frame)
   if not (rf and rf.CreateTexture and rf.SetWidth) then return end
   local chrome = rf.oxpfuiScroll
   if not chrome then
@@ -220,7 +267,7 @@ end
 --   opts.size:   square size in pixels (default 12, FlareUI's header button)
 --   opts.offset: {x, y} shift from the button's centre, in pixels
 function theme.ApplyBoxButtonPaint(button, opts)
-  local rf = realFrame(button)
+  local rf = theme.RealFrame(button)
   if not (rf and rf.CreateTexture and rf.HookScript) then return end
   opts = opts or {}
   local size = math.floor(opts.size or 12)
@@ -281,8 +328,7 @@ end
 -- the border art.
 function theme.ApplyInsetBackdrop(frame)
   local db = OXPFUI.db or {}
-  local opacity = db.opacity
-  if type(opacity) ~= "number" then opacity = 0.6 end
+  local opacity = panelOpacity(db)
   frame:SetBackdrop({
     bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background-Dark",
     edgeFile = "Interface\\Buttons\\WHITE8X8",

@@ -17,9 +17,13 @@ Build the ready-to-copy addon folder, then copy it into your `Interface\AddOns`
     python3 tools/build.py --zip      # also writes dist/OXP-FUI-<version>.zip
 
 In game: `/oxpfui` opens the settings panel (master switch, one switch per
-window, font, border style, panel opacity). `/oxpfui debug` prints what was
-skinned, what was skipped and why, and the OpenXP version you run versus the
-tested one (see the `## X-Tested-OpenXP` TOC field).
+window, font, border style, panel opacity). `/oxpfui debug` prints a report:
+the OpenXP version you run versus the tested one (see the
+`## X-Tested-OpenXP` TOC field), the master switch and per-window switches,
+how many apply passes ran, and the latest pass's outcome — which skins were
+skinned (`Skinned:`), what was skipped and why (`Skipped:`), errors
+(`Errors:`, plus `Earlier errors (previous passes):` as labelled history)
+and blocked layout attempts.
 
 ## Repository layout
 
@@ -40,6 +44,13 @@ First run creates a venv with `lupa` under `build/venv`. Skin behaviour is
 verified against a stubbed WoW API and a fake OpenXP (no game needed); the
 build tests verify the produced addon folder. A report is written to
 `tests/output/report.txt`.
+
+## Known limitations
+
+- OpenXP 1.3.48 exposes no visible inventory-manager window (only an
+  invisible keybind button, an input-propagation helper and a hidden
+  full-screen click passthrough), so the inventory-manager skin dresses the
+  hidden delete-junk helper frame.
 
 ## Credits and licenses
 

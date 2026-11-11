@@ -23,16 +23,11 @@ local theme = OXPFUI.theme
 -- OpenXP child walking (both windows keep almost every child unnamed)
 -- ---------------------------------------------------------------------------
 
--- The real API returns GetChildren/GetRegions as a vararg while the test
--- stub returns a table; normalize both into a list.
+-- GetChildren/GetRegions return their items as a vararg; collect into a
+-- list for ipairs.
 local function CallList(obj, method)
   if type(obj) ~= "table" or type(obj[method]) ~= "function" then return {} end
-  local packed = { obj[method](obj) }
-  local first = packed[1]
-  if #packed == 1 and type(first) == "table" and first[1] ~= nil then
-    return first
-  end
-  return packed
+  return { obj[method](obj) }
 end
 
 local function IsType(obj, objectType)
@@ -58,27 +53,20 @@ end
 -- to themselves so re-applying over an already-skinned string is stable
 -- (some OpenXP refresh paths restyle nothing before we run again).
 local PALETTE_MAP = {
-  { from = { 90 / 255, 184 / 255, 1 }, to = "ZONE" },    -- accent blue -> bronze
+  { from = theme.OXP_BLUE, to = "ZONE" },                -- accent blue -> bronze
   { from = { 0.86, 0.86, 0.9 }, to = "OBJECTIVE" },      -- body text grey
   { from = { 0.6, 0.62, 0.7 }, to = "DIM" },             -- muted grey
   { from = theme.C.ZONE, to = "ZONE" },
   { from = theme.C.OBJECTIVE, to = "OBJECTIVE" },
   { from = theme.C.DIM, to = "DIM" },
 }
-local EPS = 1 / 64
-
-local function NearColor(r, g, b, target)
-  return math.abs(r - target[1]) <= EPS
-    and math.abs(g - target[2]) <= EPS
-    and math.abs(b - target[3]) <= EPS
-end
 
 -- Recolour a font string by the OpenXP colour it currently wears; anything
 -- unknown lands on FlareUI body grey.
 local function MapTextColor(fs)
   local r, g, b = fs:GetTextColor()
   for _, m in ipairs(PALETTE_MAP) do
-    if r and NearColor(r, g, b, m.from) then
+    if r and theme.NearColor(r, g, b, m.from) then
       return theme.ApplyTextColor(fs, m.to)
     end
   end
@@ -91,8 +79,7 @@ local function RetintAccentTexture(tex)
   if not tex or type(tex.GetVertexColor) ~= "function" then return end
   local r, g, b, a = tex:GetVertexColor()
   if not r then return end
-  local accent = PALETTE_MAP[1].from
-  if NearColor(r, g, b, accent) then
+  if theme.NearColor(r, g, b, theme.OXP_BLUE) then
     local c = theme.C.ZONE
     tex:SetVertexColor(c[1], c[2], c[3], a)
   end

@@ -108,16 +108,31 @@ local BLOCKED_LAYOUT = {
 }
 
 -- ---------------------------------------------------------------------------
+-- Engine state
+-- ---------------------------------------------------------------------------
+
+-- Declared before the debug log so every log entry can be tagged with the
+-- apply pass it belongs to (the debug report shows the latest pass only).
+local state = {
+  ready = false,        -- PLAYER_LOGIN seen
+  openxpFound = false,
+  passes = 0,
+  lastReason = "none",
+  deferred = false,     -- a secure skin is waiting for combat to end
+}
+
+-- ---------------------------------------------------------------------------
 -- Debug log (the ONLY thing that ever reaches chat is DebugReport, and only
 -- when the user asks for it)
 -- ---------------------------------------------------------------------------
 
-local logEntries = {} -- { type, skin, info }
+local logEntries = {} -- { type, skin, info, pass }
 local blockedCount = 0
 local blockedLatest = nil
 
 local function Log(entryType, skin, info)
-  logEntries[#logEntries + 1] = { type = entryType, skin = skin, info = info }
+  logEntries[#logEntries + 1] =
+    { type = entryType, skin = skin, info = info, pass = state.passes }
   if #logEntries > 500 then table.remove(logEntries, 1) end
 end
 
@@ -173,18 +188,11 @@ local function Guard(raw, name, skinName)
 end
 
 -- ---------------------------------------------------------------------------
--- Engine state
+-- OpenXP handle
 -- ---------------------------------------------------------------------------
 
 local openxp = nil        -- OpenXP's shared addon table (fake or real)
 local openxpVersion = nil
-local state = {
-  ready = false,        -- PLAYER_LOGIN seen
-  openxpFound = false,
-  passes = 0,
-  lastReason = "none",
-  deferred = false,     -- a secure skin is waiting for combat to end
-}
 
 local function GetOpenXP()
   local ok, result = pcall(function()
@@ -405,16 +413,32 @@ function OXPFUI.DebugReport()
   end
   lines[#lines + 1] = L.debugPasses:format(state.passes, state.lastReason)
 
-  -- Per-skin outcome of the latest pass.
-  local skips, errs = {}, {}
+  -- Per-skin outcome of the latest pass: which skins actually applied (the
+  -- "Skinned" list), what was skipped or deferred and why. Only entries of
+  -- the latest pass count, so stale outcomes from earlier passes are never
+  -- reported as current. Errors from earlier passes are useful bug-report
+  -- history and stay, clearly labelled as such.
+  local applied, skips, errs, earlierErrs = {}, {}, {}, {}
   for _, e in ipairs(logEntries) do
-    if e.type == "skip" or e.type == "deferred" then
-      skips[#skips + 1] = e.skin .. " — " .. e.info
+    if e.pass == state.passes then
+      if e.type == "applied" then
+        applied[#applied + 1] = e.skin
+      elseif e.type == "skip" or e.type == "deferred" then
+        skips[#skips + 1] = e.skin .. " — " .. e.info
+      elseif e.type == "error" then
+        errs[#errs + 1] = e.skin .. " — " .. e.info
+      end
+    elseif e.type == "error" then
+      earlierErrs[#earlierErrs + 1] = e.skin .. " — " .. e.info
     end
-    if e.type == "error" then errs[#errs + 1] = e.skin .. " — " .. e.info end
   end
+  lines[#lines + 1] = L.debugApplied:format(
+    #applied > 0 and table.concat(applied, ", ") or L.debugNone)
   lines[#lines + 1] = L.debugSkipped:format(#skips > 0 and table.concat(skips, "; ") or L.debugNone)
   lines[#lines + 1] = L.debugErrors:format(#errs > 0 and table.concat(errs, "; ") or L.debugNone)
+  if #earlierErrs > 0 then
+    lines[#lines + 1] = L.debugErrorsEarlier:format(table.concat(earlierErrs, "; "))
+  end
   lines[#lines + 1] = L.debugBlocked:format(blockedCount, blockedLatest or L.debugNone)
 
   return table.concat(lines, "\n")
