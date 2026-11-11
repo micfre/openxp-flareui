@@ -282,5 +282,94 @@ class StepList(unittest.TestCase):
         self.assertEqual(env.run("return HARNESS.cardBits.list.backdrop.edgeSize"), 8)
 
 
+BOX = (0.50, 0.38, 0.21, 1.0)
+BOX_LIT = (0.65, 0.49, 0.27, 1.0)
+
+# Every OpenXP button the card chrome covers.
+CARD_BUTTONS = (
+    "HARNESS.cardBits.bar.prev",
+    "HARNESS.cardBits.bar.next",
+    "HARNESS.cardBits.bar.menu",
+    "HARNESS.cardBits.bar.settings",
+    "HARNESS.cardBits.bar.collapse",
+    "HARNESS.cardBits.bar.find",
+    "HARNESS.cardBits.bar.stop",
+    "HARNESS.cardBits.bar.resume",
+    "HARNESS.cardBits.mini.expand",
+)
+
+
+class BronzeSquareButtons(unittest.TestCase):
+    """Story 3: the header band look — FlareUI-style bronze square buttons
+    drawn procedurally over OpenXP's existing controls."""
+
+    def test_every_card_button_gets_the_bronze_square_paint(self):
+        env = Env()
+        env.boot()
+        for expr in CARD_BUTTONS:
+            with self.subTest(button=expr):
+                box = f"{expr}.oxpfuiBox"
+                self.assertNotEqual(env.run(f"return {box} == nil"), True)
+                rects = env.run(f"return #({box}.outline)")
+                self.assertGreaterEqual(rects, 8)  # 4 edges + 4 corner steps
+                self.assertNotEqual(env.run(f"return {box}.fill == nil"), True)
+                # drawn on the button itself, bronze at rest
+                self.assertEqual(env.run(
+                    f"return {box}.outline[1]:GetParent() == ({expr}.__raw or {expr})"), True)
+                self.assertEqual(vertex_of(env, f"{box}.outline[1]"), BOX)
+                self.assertEqual(env.run(f"return {box}.size"), 12)
+
+    def test_hover_lights_the_square_and_keeps_openxp_behaviour(self):
+        env = Env()
+        env.boot()
+        btn = "HARNESS.cardBits.bar.prev"
+        box = f"{btn}.oxpfuiBox"
+        # run the button's OnEnter the way the client would
+        env.run(f"local s = {btn}:GetScript('OnEnter'); s({btn})")
+        self.assertEqual(vertex_of(env, f"{box}.outline[1]"), BOX_LIT)
+        # OpenXP's own hover behaviour (bg wash) still ran: the hook chained
+        self.assertEqual(env.run(
+            f"local r,g,b = {btn}.bg:GetVertexColor(); return r,g,b"), (1.0, 1.0, 1.0))
+        env.run(f"local s = {btn}:GetScript('OnLeave'); s({btn})")
+        self.assertEqual(vertex_of(env, f"{box}.outline[1]"), BOX)
+
+    def test_chrome_never_moves_or_resizes_the_buttons(self):
+        env = Env()
+        env.boot()
+        env.run("HARNESS.openxp.card.Refresh(nil, true)")
+        for expr in CARD_BUTTONS:
+            with self.subTest(button=expr):
+                for method in ("SetPoint", "SetSize", "SetWidth", "SetHeight",
+                               "SetScale", "ClearAllPoints", "SetAllPoints"):
+                    self.assertEqual(
+                        env.run(f"local n=0; local f={expr}; "
+                                f"for _,c in ipairs(f.__calls) do if c[1]=={method!r} then n=n+1 end end; return n"),
+                        0, f"{expr}:{method} was called")
+
+
+class HeaderBand(unittest.TestCase):
+    def test_header_band_gets_flareui_divider_under_it(self):
+        env = Env()
+        env.boot()
+        divider = "OpenXPCard.oxpfuiDivider"
+        self.assertNotEqual(env.run(f"return {divider} == nil"), True)
+        self.assertEqual(env.run(f"return {divider}:GetTexture()"),
+                         "Interface\\Common\\UI-TooltipDivider-Transparent")
+        self.assertEqual(env.run(f"return {divider}:GetHeight()"), 8)
+        # chrome is parented to the real card frame and anchored to the
+        # header without touching it
+        self.assertEqual(env.run(f"return {divider}:GetParent() == _G.OpenXPCard"), True)
+        self.assertGreaterEqual(env.run(f"return {divider}:GetNumPoints()"), 2)
+
+    def test_step_list_and_header_buttons_are_chromed_too(self):
+        env = Env()
+        env.boot()
+        env.run("HARNESS.openxp.card.ToggleStepList()")
+        self.assertNotEqual(
+            env.run("return HARNESS.cardBits.list.close.oxpfuiBox == nil"), True)
+        self.assertNotEqual(
+            env.run("return HARNESS.cardBits.header.stepBtn.oxpfuiBox == nil"), True)
+
+
 if __name__ == "__main__":
     unittest.main()

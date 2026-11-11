@@ -121,6 +121,27 @@ local function skinHeader(header)
   text(header.range, "DIM", "header")
   text(header.step, "TITLE", "header")
   setVertex(header.dot, C.ZONE)  -- the blue accent dot becomes amber
+  -- a bronze square over the "Step n / n" hit-area button, at its right end
+  if header.stepBtn then theme.ApplyBoxButtonPaint(header.stepBtn, { offset = { x = 28, y = 0 } }) end
+end
+
+-- FlareUI's header band: a divider texture right under OpenXP's header.
+-- Own texture, anchored to the header; the header itself never moves.
+local function ensureDivider(cardFrame, header)
+  local rf = raw(cardFrame)
+  local hf = raw(header)
+  if not (rf and rf.CreateTexture and hf) then return end
+  local t = rf.oxpfuiDivider
+  if not t then
+    t = rf:CreateTexture(nil, "ARTWORK")
+    t:SetTexture("Interface\\Common\\UI-TooltipDivider-Transparent")
+    t:SetHeight(8)
+    t:SetDrawLayer("ARTWORK", 1)
+    rf.oxpfuiDivider = t
+  end
+  t:ClearAllPoints()
+  t:SetPoint("TOPLEFT", hf, "BOTTOMLEFT", 2, -1)
+  t:SetPoint("TOPRIGHT", hf, "BOTTOMRIGHT", -2, -1)
 end
 
 local function skinHist(hist, openxp)
@@ -172,6 +193,7 @@ local function skinBar(bar)
   for _, btn in ipairs({ bar.prev, bar.next, bar.menu, bar.settings,
                          bar.collapse, bar.find, bar.stop, bar.resume }) do
     if btn then
+      theme.ApplyBoxButtonPaint(btn)
       text(btn.label, "OBJECTIVE", "body")
       if btn.bg and matches(btn.bg, OXP_BLUE) then
         setVertex(btn.bg, C.ZONE, 0.16)  -- labelled buttons' blue wash -> amber
@@ -193,6 +215,7 @@ end
 local function skinMini(mini)
   text(mini.text, "TITLE", "title")
   text(mini.count, "DIM", "body")
+  if mini.expand then theme.ApplyBoxButtonPaint(mini.expand) end
   if mini.badge then
     amberIfBlue(mini.badge.fill, 0.16)
     amberIfBlue(mini.badge.ring)
@@ -203,6 +226,7 @@ end
 local function skinStepList(list, openxp)
   theme.ApplyBackdrop(list)
   text(list.title, "TITLE", "header")
+  if list.close then theme.ApplyBoxButtonPaint(list.close) end
   local rows = list.rows or {}
   for _, row in ipairs(rows) do
     local colorName = "TITLE"
@@ -260,7 +284,10 @@ local function Apply(ctx)
     elseif fields(child, "title", "rows", "close") then list = child
     end
   end
-  if header then skinHeader(ctx.Guard(header)) end
+  if header then
+    skinHeader(ctx.Guard(header))
+    ensureDivider(f, header)
+  end
   if cardModule and cardModule.hist then skinHist(ctx.Guard(cardModule.hist), openxp) end
   if cardModule then skinBlocks(cardModule.blocksForTest, openxp) end
   if upNext then skinUpNext(ctx.Guard(upNext)) end
