@@ -79,6 +79,20 @@ local function Paint(af)
     pointer:SetDesaturated(true)
     pointer:SetVertexColor(C.ZONE[1], C.ZONE[2], C.ZONE[3], 1)
   end
+
+  -- Story 9: distance and label in the chosen FlareUI font with the 1px
+  -- shadow, overriding OpenXP's font and OUTLINE settings. The distance is
+  -- the arrow's headline number (header size); the label is supporting
+  -- body text. Content stays OpenXP's.
+  local dist = af.oxpDist
+  if dist then
+    theme.ApplyFontString(dist, "header")
+  end
+  local label = af.oxpLabel
+  if label then
+    theme.ApplyFontString(label, "body")
+    theme.ApplyTextColor(label, "OBJECTIVE")
+  end
 end
 
 -- ---------------------------------------------------------------------------

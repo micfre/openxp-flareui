@@ -123,5 +123,43 @@ class ArrowPerFrameState(unittest.TestCase):
                     " return r,g,b,a"), ring)
 
 
+class ArrowTypography(unittest.TestCase):
+    """Story 9: distance and label text in the chosen FlareUI font with a
+    1px shadow (no outline — OXP-FUI wins over OpenXP's OUTLINE setting)."""
+
+    def test_dist_and_label_use_flareui_font_with_shadow(self):
+        env = Env()
+        env.boot()
+        # Distance: the arrow's headline number — header size 13.
+        self.assertEqual(env.run(
+            "local p,s,f = RXPG_ARROW.oxpDist:GetFont(); return p,s,f"),
+            ("Fonts\\FRIZQT__.TTF", 13, ""))
+        # Label: supporting text — body size 11.
+        self.assertEqual(env.run(
+            "local p,s,f = RXPG_ARROW.oxpLabel:GetFont(); return p,s,f"),
+            ("Fonts\\FRIZQT__.TTF", 11, ""))
+        for fs in ("oxpDist", "oxpLabel"):
+            self.assertEqual(env.run(
+                f"local r,g,b,a = RXPG_ARROW.{fs}:GetShadowColor(); return r,g,b,a"),
+                (0.0, 0.0, 0.0, 1.0), fs)
+            self.assertEqual(env.run(
+                f"local x,y = RXPG_ARROW.{fs}:GetShadowOffset(); return x,y"),
+                (1, -1), fs)
+
+    def test_chosen_condensed_font_is_used_on_arrow_text(self):
+        env = Env(db={"font": "Fira Condensed"})
+        env.boot()
+        path = "Interface\\AddOns\\OXP-FUI\\Media\\Fonts\\FiraSansExtraCondensed-Regular.ttf"
+        self.assertEqual(env.run("return (RXPG_ARROW.oxpDist:GetFont())"), path)
+        self.assertEqual(env.run("return (RXPG_ARROW.oxpLabel:GetFont())"), path)
+
+    def test_label_text_colour_is_flareui_objective_grey(self):
+        env = Env()
+        env.boot()
+        self.assertEqual(env.run(
+            "local r,g,b,a = RXPG_ARROW.oxpLabel:GetTextColor(); return r,g,b,a"),
+            OBJECTIVE + (1.0,))
+
+
 if __name__ == "__main__":
     unittest.main()
