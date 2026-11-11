@@ -129,6 +129,16 @@ function OXPFUI.RegisterSkin(def)
     return
   end
   def.windows = def.windows or {}
+  -- Unknown window keys could never be switched off: say so in /oxpfui debug.
+  for _, w in ipairs(def.windows) do
+    local known = false
+    for _, key in ipairs(OXPFUI.WINDOWS) do
+      if key == w then known = true end
+    end
+    if not known then
+      Log("invalid", def.name, "unknown window key '" .. tostring(w) .. "'")
+    end
+  end
   skins[#skins + 1] = def
 end
 

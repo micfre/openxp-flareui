@@ -120,6 +120,17 @@ class Build(unittest.TestCase):
     def test_staging_happens_in_the_ephemeral_build_folder(self):
         self.assertTrue((ROOT / "build" / "stage" / "OXP-FUI" / "OXP-FUI.toc").is_file())
 
+    def test_toc_and_engine_agree_on_the_tested_openxp_version(self):
+        toc_version = toc_meta()["X-Tested-OpenXP"]
+        engine = (DIST / "Engine.lua").read_text()
+        lua_version = next(
+            (line.strip() for line in engine.splitlines()
+             if "testedOpenXP" in line and line.strip().startswith("OXPFUI.testedOpenXP")),
+            None,
+        )
+        self.assertIsNotNone(lua_version, "OXPFUI.testedOpenXP missing from Engine.lua")
+        self.assertIn(f'"{toc_version}"', lua_version)
+
 
 if __name__ == "__main__":
     unittest.main()

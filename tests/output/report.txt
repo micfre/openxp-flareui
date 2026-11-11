@@ -1,1 +1,7 @@
-ran=37 failures=0 errors=0 skipped=0
+ran=38 failures=1 errors=0 skipped=0
+FAILURES: test_toc_and_engine_agree_on_the_tested_openxp_version (test_build.Build.test_toc_and_engine_agree_on_the_tested_openxp_version)
+Traceback (most recent call last):
+  File "/tmp/opencode/worktrees/ticket-2-scaffold/tests/test_build.py", line 131, in test_toc_and_engine_agree_on_the_tested_openxp_version
+    self.assertIsNotNone(lua_version, "OXPFUI.testedOpenXP missing from Engine.lua")
+AssertionError: unexpectedly None : OXPFUI.testedOpenXP missing from Engine.lua
+
