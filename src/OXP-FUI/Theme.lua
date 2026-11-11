@@ -75,14 +75,23 @@ theme.BORDERS = {
 }
 theme.DEFAULT_BORDER = "Frames"
 
+-- Panel fill opacity from settings; every backdrop recipe shares this
+-- default for a missing/non-numeric value.
+local DEFAULT_OPACITY = 0.6
+
+local function panelOpacity(db)
+  local opacity = db.opacity
+  if type(opacity) ~= "number" then opacity = DEFAULT_OPACITY end
+  return opacity
+end
+
 -- The tracker backdrop recipe: Blizzard's dark dialog fill (a warm near-black
 -- vertical gradient), FlareUI border art, insets 3, bronze tint, panel
 -- opacity from settings. Appearance only — callers never resize the frame.
 function theme.ApplyBackdrop(frame)
   local db = OXPFUI.db or {}
   local border = theme.BORDERS[db.borderStyle] or theme.BORDERS[theme.DEFAULT_BORDER]
-  local opacity = db.opacity
-  if type(opacity) ~= "number" then opacity = 0.6 end
+  local opacity = panelOpacity(db)
   frame:SetBackdrop({
     bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background-Dark",
     edgeFile = border.file,
@@ -101,8 +110,7 @@ end
 -- of drawing a second border inside it.
 function theme.ApplyPanelFill(frame)
   local db = OXPFUI.db or {}
-  local opacity = db.opacity
-  if type(opacity) ~= "number" then opacity = 0.6 end
+  local opacity = panelOpacity(db)
   frame:SetBackdrop({
     bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background-Dark",
     edgeFile = nil,
@@ -310,8 +318,7 @@ end
 -- the border art.
 function theme.ApplyInsetBackdrop(frame)
   local db = OXPFUI.db or {}
-  local opacity = db.opacity
-  if type(opacity) ~= "number" then opacity = 0.6 end
+  local opacity = panelOpacity(db)
   frame:SetBackdrop({
     bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background-Dark",
     edgeFile = "Interface\\Buttons\\WHITE8X8",
