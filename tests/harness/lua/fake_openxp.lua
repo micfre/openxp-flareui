@@ -115,6 +115,7 @@ HARNESS.ApplyOpenXPLook()
 local addon = {
   openxpVersion = HARNESS.openxpVersion,
   title = "OpenXP",
+  RXPFrame = rxpFrame,
   settings = {
     profile = {
       guideFont = "default",          -- "Arial Narrow" default in OpenXP

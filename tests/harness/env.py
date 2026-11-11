@@ -121,7 +121,8 @@ class Env:
     # -- observation --------------------------------------------------------
 
     def chat(self) -> list[str]:
-        return list(self.run("local t = {}; for i = 1, #HARNESS.chat do t[i] = HARNESS.chat[i] end; return t"))
+        joined = self.run("return table.concat(HARNESS.chat, '\\n')")
+        return joined.split("\n") if joined else []
 
     def calls_made_on(self, frame_name: str, method: str | None = None) -> int:
         """Count recorded mutating calls on a frame (optionally one method)."""

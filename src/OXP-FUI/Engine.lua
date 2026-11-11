@@ -233,7 +233,8 @@ local function ApplySkin(def, reason)
     theme = OXPFUI.theme,
     db = OXPFUI.db,
     OpenXP = function() return openxp end,
-    Frame = function(_, name)
+    -- Called dot-style: ctx.Frame("GlobalName") / ctx.Guard(rawFrame).
+    Frame = function(name)
       local raw = name and _G[name]
       if raw == nil then
         Log("skip", def.name, "missing frame " .. tostring(name))
@@ -245,7 +246,7 @@ local function ApplySkin(def, reason)
       end
       return Guard(raw, name, def.name)
     end,
-    Guard = function(_, raw)
+    Guard = function(raw)
       if type(raw) ~= "table" then return nil end
       local name = "?"
       if raw.GetName then name = raw:GetName() or "?" end

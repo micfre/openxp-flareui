@@ -43,6 +43,187 @@ OXPFUI.RegisterSkin{
 }
 """
 
+SECURE_SKIN = """
+OXPFUI.RegisterSkin{
+  name = "test-targets",
+  windows = { "targets" },
+  secure = true,
+  Apply = function(ctx)
+    local f = ctx.Frame("RXPTargetFrame_EnemyButton1")
+    if f then ctx.theme.ApplyBackdrop(f) end
+  end,
+}
+"""
+
+MISSING_FRAME_SKIN = """
+OXPFUI.RegisterSkin{
+  name = "test-missing",
+  windows = { "arrow" },
+  Apply = function(ctx)
+    local f = ctx.Frame("OpenXPCardDoesNotExist")
+    if not f then return end
+  end,
+}
+"""
+
+EXCLUDED_FRAME_SKIN = """
+OXPFUI.RegisterSkin{
+  name = "test-greedy",
+  windows = { "arrow", "card" },
+  Apply = function(ctx)
+    -- A sloppy skin that asks for excluded/foreign frames: the engine's
+    -- resolver must refuse each one and the frames must stay untouched.
+    for _, name in ipairs({
+      "GameTooltip", "ItemRefTooltip", "WorldMapFrame", "Minimap",
+      "RXPFrame", "RXPFrame_bottomFrame", "RXPFrameGuideName",
+      "RXPG_MenuFrame", "RXP_MMMenuFrame", "RXP_WMMenuFrame",
+      "RXP_WMMenuFrame_MenuFrame", "AnotherAddonFrame", "BugSackFrame",
+    }) do
+      ctx.Frame(name)
+    end
+  end,
+}
+"""
+
+BROKEN_SKIN = """
+OXPFUI.RegisterSkin{
+  name = "test-broken",
+  windows = { "arrow" },
+  Apply = function() error("boom") end,
+}
+"""
+
+LAYOUT_VIOLATING_SKIN = """
+OXPFUI.RegisterSkin{
+  name = "test-mover",
+  windows = { "card" },
+  Apply = function(ctx)
+    local f = ctx.Frame("OpenXPCard")
+    if f then
+      f:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+      f:SetSize(999, 999)
+      f:SetScale(2)
+    end
+  end,
+}
+"""
+
+
+class SkinApplication(unittest.TestCase):
+    def test_registered_skin_applies_flareui_look_on_login(self):
+        env = Env()
+        env.install_skins(ARROW_SKIN)
+        env.boot()
+        edge = env.run("return RXPG_ARROW.backdrop.edgeFile")
+        self.assertEqual(edge, "Interface\\AddOns\\OXP-FUI\\Media\\Borders\\FlareUI-Frames.tga")
+        self.assertEqual(env.run("return RXPG_ARROW.backdrop.edgeSize"), 16)
+        self.assertEqual(env.run(
+            "local r,g,b,a = RXPG_ARROW:GetBackdropBorderColor(); return r,g,b,a"), (0.65, 0.49, 0.27, 1.0))
+        self.assertEqual(env.run(
+            "local r,g,b,a = RXPG_ARROW:GetBackdropColor(); return r,g,b,a"), (1.0, 1.0, 1.0, 0.6))
+        # Typography: Friz Quadrata 11 (body), no outline, 1px black shadow.
+        self.assertEqual(env.run(
+            "local p,s,f = RXPG_ARROW.text:GetFont(); return p,s,f"),
+            ("Fonts\\FRIZQT__.TTF", 11, ""))
+        self.assertEqual(env.run(
+            "local r,g,b,a = RXPG_ARROW.text:GetTextColor(); return r,g,b,a"), (1.0, 0.82, 0.0, None))
+
+    def test_chosen_condensed_font_is_used(self):
+        env = Env(db={"font": "Roboto Condensed"})
+        env.install_skins(ARROW_SKIN)
+        env.boot()
+        self.assertEqual(env.run("return (RXPG_ARROW.text:GetFont())"),
+                         "Interface\\AddOns\\OXP-FUI\\Media\\Fonts\\RobotoCondensed-Regular.ttf")
+
+    def test_border_style_thin_uses_half_edge_size(self):
+        env = Env(db={"borderStyle": "Thin"})
+        env.install_skins(ARROW_SKIN)
+        env.boot()
+        self.assertEqual(env.run("return RXPG_ARROW.backdrop.edgeFile"),
+                         "Interface\\AddOns\\OXP-FUI\\Media\\Borders\\FlareUI-Thin.tga")
+        self.assertEqual(env.run("return RXPG_ARROW.backdrop.edgeSize"), 8)
+
+    def test_per_window_switch_disables_that_skin_only(self):
+        env = Env(db={"windows": {"arrow": False}})
+        env.install_skins(ARROW_SKIN + CARD_SKIN)
+        env.boot()
+        # arrow skin skipped: OpenXP look kept
+        self.assertEqual(env.run("return RXPG_ARROW.backdrop.edgeFile"),
+                         "Interface\\Buttons\\WHITE8X8")
+        # card skin still applied
+        self.assertEqual(env.run("return OpenXPCard.backdrop.edgeFile"),
+                         "Interface\\AddOns\\OXP-FUI\\Media\\Borders\\FlareUI-Frames.tga")
+
+    def test_missing_frame_is_skipped_quietly_without_errors(self):
+        env = Env()
+        env.install_skins(MISSING_FRAME_SKIN + ARROW_SKIN)
+        env.boot()
+        self.assertEqual(env.chat(), [])  # quiet: no error, no chat spam
+        env.slash("/oxpfui debug")
+        report = "\n".join(env.chat())
+        self.assertIn("missing frame OpenXPCardDoesNotExist", report)
+
+    def test_broken_skin_does_not_break_other_skins(self):
+        env = Env()
+        env.install_skins(BROKEN_SKIN + CARD_SKIN)
+        env.boot()
+        self.assertEqual(env.chat(), [])
+        # card skin applied even though test-broken errored during the pass
+        self.assertEqual(env.run("return OpenXPCard.backdrop.edgeFile"),
+                         "Interface\\AddOns\\OXP-FUI\\Media\\Borders\\FlareUI-Frames.tga")
+        env.slash("/oxpfui debug")
+        self.assertIn("boom", "\n".join(env.chat()))
+
+    def test_no_position_or_size_change_ever_happens(self):
+        env = Env()
+        env.install_skins(ARROW_SKIN + LAYOUT_VIOLATING_SKIN + EXCLUDED_FRAME_SKIN)
+        env.boot()
+        # The layout-violating skin's calls are blocked by the guarded frame.
+        for frame in ("OpenXPCard", "RXPG_ARROW"):
+            for method in ("SetPoint", "SetSize", "SetWidth", "SetHeight",
+                           "SetScale", "ClearAllPoints", "SetAllPoints"):
+                self.assertEqual(env.calls_made_on(frame, method), 0,
+                                 f"{frame}:{method} leaked through the guard")
+        env.slash("/oxpfui debug")
+        report = "\n".join(env.chat())
+        self.assertIn("Blocked layout attempts: 3", report)
+
+
+class Exclusions(unittest.TestCase):
+    def test_excluded_and_foreign_frames_are_never_resolved_or_touched(self):
+        env = Env()
+        env.install_skins(EXCLUDED_FRAME_SKIN + ARROW_SKIN)
+        env.boot()
+        env.run("HARNESS.openxp:RenderFrame()")
+        env.run("HARNESS.openxp:ReloadTheme()")
+        for frame in ("RXPFrame", "RXPFrame_bottomFrame", "RXPFrameGuideName",
+                      "RXPG_MenuFrame", "RXP_MMMenuFrame", "RXP_WMMenuFrame",
+                      "RXP_WMMenuFrame_MenuFrame", "GameTooltip", "ItemRefTooltip",
+                      "WorldMapFrame", "Minimap", "AnotherAddonFrame", "BugSackFrame"):
+            self.assertEqual(env.calls_made_on(frame), 0, f"{frame} was touched")
+        env.slash("/oxpfui debug")
+        report = "\n".join(env.chat())
+        self.assertIn("frame not skinnable: GameTooltip", report)
+        self.assertIn("frame not skinnable: AnotherAddonFrame", report)
+
+    def test_traversed_frames_are_denied_when_excluded(self):
+        env = Env()
+        env.install_skins(
+            "OXPFUI.RegisterSkin{\n"
+            "  name = 'test-via-table',\n"
+            "  windows = { 'arrow' },\n"
+            "  Apply = function(ctx)\n"
+            "    local openxp = ctx.OpenXP()\n"
+            "    -- Walk OpenXP's table to the legacy hidden window: same rules.\n"
+            "    ctx.Guard(openxp and openxp.RXPFrame or nil)\n"
+            "  end,\n"
+            "}\n"
+        )
+        env.boot()
+        self.assertEqual(env.calls_made_on("RXPFrame"), 0)
+        env.slash("/oxpfui debug")
+        self.assertIn("frame not skinnable: RXPFrame", "\n".join(env.chat()))
+
 
 class LoadsQuietly(unittest.TestCase):
     def test_loads_and_boots_without_errors_or_chat_spam(self):
