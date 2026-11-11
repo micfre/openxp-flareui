@@ -1,0 +1,13 @@
+## Interface: 16001
+## Title: OXP-FUI
+## Notes: FlareUI-style reskin for OpenXP
+## Author: micfre
+## Version: 0.1.0
+## X-Tested-OpenXP: 1.3.48
+## RequiredDeps: OpenXP
+## SavedVariables: OXPFUIDB
+Core.lua
+Locale.lua
+Theme.lua
+Engine.lua
+SettingsPanel.lua
