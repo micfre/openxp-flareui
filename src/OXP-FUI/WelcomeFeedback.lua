@@ -121,6 +121,13 @@ local function ApplyWelcome(ctx)
   if not f then return end
   theme.ApplyBackdrop(f)
   ApplyWindowTypography(f, "OpenXP")
+  -- The scrolling body lives on the content frame inside the scroll frame;
+  -- OpenXP stores it as a field. (The scroll frame itself is Blizzard
+  -- template chrome and is left alone.)
+  if IsType(f.body, "FontString") then
+    theme.ApplyFontString(f.body, "body")
+    MapTextColor(f.body)
+  end
 end
 
 local function ApplyFeedback(ctx)
