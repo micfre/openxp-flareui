@@ -121,7 +121,7 @@ local function baseMethods(kind)
     end,
     SetBackdropBorderColor = function(self, r, g, b, a)
       record(self, "SetBackdropBorderColor", r, g, b, a)
-      self.__backdropBorderColor = { r, g, b, a }
+      self.__backdropBorderColor = { r, g, b, a or 1 }
     end,
     GetBackdropBorderColor = function(self)
       local c = self.__backdropBorderColor or { 1, 1, 1, 1 }
@@ -287,7 +287,7 @@ local fsExtra = {
   GetText = function(self) return self.__text end,
   SetTextColor = function(self, r, g, b, a)
     record(self, "SetTextColor", r, g, b, a)
-    self.__textColor = { r, g, b, a }
+    self.__textColor = { r, g, b, a or 1 }
   end,
   GetTextColor = function(self)
     local c = self.__textColor or { 1, 1, 1, 1 }
@@ -449,6 +449,68 @@ WorldMapFrame = CreateFrame("Frame", "WorldMapFrame", UIParent)
 Minimap = CreateFrame("Frame", "Minimap", UIParent)
 GameTooltip = CreateFrame("Frame", "GameTooltip", UIParent)
 ItemRefTooltip = CreateFrame("Frame", "ItemRefTooltip", UIParent)
+
+-- Tooltip line model: AddLine/AddDoubleLine create the game's real global
+-- line font strings (<name>TextLeft<N> / <name>TextRight<N>) on demand, like
+-- the client does; NumLines counts lines; ClearLines drops them (the client
+-- clears the tooltip before each new unit/item). GetUnit/GetItem read the
+-- HARNESS state the tests set.
+local function enableTooltip(tt)
+  tt.__lines = 0
+  tt.AddLine = function(self, text, r, g, b, a)
+    record(self, "AddLine", text)
+    self.__lines = self.__lines + 1
+    local fs = self:CreateFontString(self:GetName() .. "TextLeft" .. self.__lines, "OVERLAY")
+    fs:SetText(text)
+    if r then fs:SetTextColor(r, g, b, a) end
+    return self
+  end
+  tt.AddDoubleLine = function(self, left, right, rL, gL, bL, aL, rR, gR, bR, aR)
+    record(self, "AddDoubleLine", left, right)
+    self.__lines = self.__lines + 1
+    local i = self.__lines
+    local fl = self:CreateFontString(self:GetName() .. "TextLeft" .. i, "OVERLAY")
+    fl:SetText(left)
+    if rL then fl:SetTextColor(rL, gL, bL, aL) end
+    local fr = self:CreateFontString(self:GetName() .. "TextRight" .. i, "OVERLAY")
+    fr:SetText(right)
+    if rR then fr:SetTextColor(rR, gR, bR, aR) end
+    return self
+  end
+  tt.NumLines = function(self) return self.__lines end
+  tt.ClearLines = function(self)
+    record(self, "ClearLines")
+    for i = 1, self.__lines do
+      _G[self:GetName() .. "TextLeft" .. i] = nil
+      _G[self:GetName() .. "TextRight" .. i] = nil
+    end
+    self.__lines = 0
+  end
+  tt.GetUnit = function(self)
+    local u = HARNESS.tooltipUnit
+    if u then return u.name, u.token end
+  end
+  tt.GetItem = function(self)
+    local i = HARNESS.tooltipItem
+    if i then return i.name, "item:" .. tostring(i.id) end
+  end
+end
+enableTooltip(GameTooltip)
+enableTooltip(ItemRefTooltip)
+
+-- The client's default tooltip border colour (a real Blizzard global; the
+-- fake OpenXP's own border reset reads it). Test stand-in value.
+TOOLTIP_DEFAULT_COLOR = { r = 1, g = 1, b = 1 }
+
+-- Unit stubs driving the fake OpenXP's tooltip flow: tests describe the
+-- hovered unit in HARNESS.units[token].
+HARNESS.units = {}
+local function Unit(token) return HARNESS.units[token] end
+function UnitExists(token) return Unit(token) ~= nil end
+function UnitName(token) local u = Unit(token); return u and u.name or nil end
+function UnitGUID(token) local u = Unit(token); return u and u.guid or nil end
+function UnitIsPlayer(token) local u = Unit(token); return u ~= nil and u.player == true end
+function UnitCanAttack(_, token) local u = Unit(token); return u ~= nil and u.attackable == true end
 
 -- File loader used by the Python side to load addon files with WoW varargs.
 function HARNESS.LoadFile(path, arg1, arg2)
