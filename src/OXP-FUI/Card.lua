@@ -63,8 +63,11 @@ local function isFontString(fs)
   return fs and fs.SetFont and fs.SetTextColor and true or false
 end
 
--- A step list / history row's status, using OpenXP's own logic when it is
--- reachable and falling back to whatever the frames themselves show.
+-- A step row's / history row's status colour, from OpenXP's own status
+-- keys; PILL_COLORS encodes the status -> palette mapping once for the
+-- step pills, the history rows and the step-list rows (default varies by
+-- caller). A row's status uses OpenXP's own logic when it is reachable
+-- and falls back to whatever the frames themselves show.
 local PILL_COLORS = {
   done = "TITLE_DONE",
   skipped = "OBJECTIVE_DONE",
@@ -149,10 +152,7 @@ local function skinHist(hist, openxp)
   text(hist.hint, "DIM", "body")
   for _, row in ipairs(hist.rows or {}) do
     local status = row.status or rowStatus(row, openxp)
-    local colorName = "OBJECTIVE"
-    if status == "done" then colorName = "TITLE_DONE"
-    elseif status == "skipped" then colorName = "OBJECTIVE_DONE"
-    elseif status == "chain" then colorName = "TITLE" end
+    local colorName = PILL_COLORS[status] or "OBJECTIVE"
     text(row.text, colorName, "body")
     text(row.num, "DIM", "body")
     skinPill(row.pill, openxp)
@@ -238,9 +238,7 @@ local function skinStepList(list, openxp)
       text(row.num, "TITLE_FOCUS", "body")
     else
       local status = rowStatus(row, openxp)
-      if status == "done" then colorName = "TITLE_DONE"
-      elseif status == "skipped" then colorName = "OBJECTIVE_DONE"
-      elseif status == "chain" then colorName = "TITLE" end
+      colorName = PILL_COLORS[status] or "TITLE"
       text(row.num, "DIM", "body")
     end
     text(row.text, colorName, "title")
