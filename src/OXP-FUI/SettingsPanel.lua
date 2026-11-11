@@ -30,17 +30,14 @@ local function makeToggle(parent, getDescription)
 
   local function paint()
     local desc = getDescription()
+    local c = desc.lit and theme.C.BOX_LIT or theme.C.BOX
     if desc.isOn then
-      btn.dot:SetColorTexture(desc.lit and theme.C.BOX_LIT[1] or theme.C.BOX[1],
-        desc.lit and theme.C.BOX_LIT[2] or theme.C.BOX[2],
-        desc.lit and theme.C.BOX_LIT[3] or theme.C.BOX[3], 1)
+      btn.dot:SetColorTexture(c[1], c[2], c[3], 1)
       btn.dot:Show()
     else
       btn.dot:Hide()
     end
-    btn.border:SetColorTexture(desc.lit and theme.C.BOX_LIT[1] or theme.C.BOX[1],
-      desc.lit and theme.C.BOX_LIT[2] or theme.C.BOX[2],
-      desc.lit and theme.C.BOX_LIT[3] or theme.C.BOX[3], 1)
+    btn.border:SetColorTexture(c[1], c[2], c[3], 1)
   end
 
   btn:SetScript("OnEnter", function() getDescription().hover = true; paint() end)
@@ -55,6 +52,20 @@ local function label(parent, text, kind, colorName)
   fs:SetText(text)
   theme.ApplyText(fs, kind or "body", colorName or "OBJECTIVE")
   return fs
+end
+
+-- A settings cycle button (font choice, border style): dark plate with a
+-- centred bronze label. Size, anchor and OnClick are the caller's.
+local function makeCycleButton(parent)
+  local btn = CreateFrame("Button", nil, parent)
+  btn.tex = btn:CreateTexture(nil, "BACKGROUND")
+  btn.tex:SetAllPoints(btn)
+  btn.tex:SetColorTexture(0, 0, 0, 0.5)
+  btn.text = btn:CreateFontString(nil, "OVERLAY")
+  btn.text:SetAllPoints(btn)
+  btn.text:SetJustifyH("CENTER")
+  theme.ApplyText(btn.text, "body", "ZONE")
+  return btn
 end
 
 local ROW = 22
@@ -148,16 +159,9 @@ local function buildPanel()
 
   f.fontLabel = label(f, L.fontLabel, "title", "TITLE")
   f.fontLabel:SetPoint("TOPLEFT", f, "TOPLEFT", 10, -240)
-  f.fontBtn = CreateFrame("Button", nil, f)
+  f.fontBtn = makeCycleButton(f)
   f.fontBtn:SetSize(160, 18)
   f.fontBtn:SetPoint("LEFT", f.fontLabel, "RIGHT", 10, 0)
-  f.fontBtn.tex = f.fontBtn:CreateTexture(nil, "BACKGROUND")
-  f.fontBtn.tex:SetAllPoints(f.fontBtn)
-  f.fontBtn.tex:SetColorTexture(0, 0, 0, 0.5)
-  f.fontBtn.text = f.fontBtn:CreateFontString(nil, "OVERLAY")
-  f.fontBtn.text:SetAllPoints(f.fontBtn)
-  f.fontBtn.text:SetJustifyH("CENTER")
-  theme.ApplyText(f.fontBtn.text, "body", "ZONE")
   f.fontBtn:SetScript("OnClick", function()
     db.font = theme.FONTS[fontIndex() % #theme.FONTS + 1].key
     f.fontBtn.text:SetText(db.font)
@@ -169,16 +173,9 @@ local function buildPanel()
   local borderKeys = { "Frames", "Thick", "Thin" }
   f.borderLabel = label(f, L.borderLabel, "title", "TITLE")
   f.borderLabel:SetPoint("TOPLEFT", f, "TOPLEFT", 10, -266)
-  f.borderBtn = CreateFrame("Button", nil, f)
+  f.borderBtn = makeCycleButton(f)
   f.borderBtn:SetSize(160, 18)
   f.borderBtn:SetPoint("LEFT", f.borderLabel, "RIGHT", 10, 0)
-  f.borderBtn.tex = f.borderBtn:CreateTexture(nil, "BACKGROUND")
-  f.borderBtn.tex:SetAllPoints(f.borderBtn)
-  f.borderBtn.tex:SetColorTexture(0, 0, 0, 0.5)
-  f.borderBtn.text = f.borderBtn:CreateFontString(nil, "OVERLAY")
-  f.borderBtn.text:SetAllPoints(f.borderBtn)
-  f.borderBtn.text:SetJustifyH("CENTER")
-  theme.ApplyText(f.borderBtn.text, "body", "ZONE")
   f.borderBtn:SetScript("OnClick", function()
     local current
     for i, k in ipairs(borderKeys) do
