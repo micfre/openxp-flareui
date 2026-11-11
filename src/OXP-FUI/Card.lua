@@ -222,6 +222,16 @@ local function skinStepList(list, openxp)
     text(row.text, colorName, "title")
     skinPill(row.pill, openxp)
   end
+  -- FlareUI's procedural bronze scrollbar beside the wheel-scrolled list.
+  theme.ApplyScrollBar(list, {
+    state = function()
+      local total = list.count or #rows
+      local visible = #rows
+      if total <= visible then return 0, 1, false end
+      local frac = (list.offset or 0) / (total - visible)
+      return frac, visible / total, true
+    end,
+  })
 end
 
 -- ---------------------------------------------------------------------------

@@ -194,5 +194,93 @@ class CardTypography(unittest.TestCase):
             f"local x,y = {zone}:GetShadowOffset(); return x,y"), (1, -1))
 
 
+class StepList(unittest.TestCase):
+    """Story 4 + ticket scope: the step list popup in the FlareUI look with
+    a procedural bronze scrollbar, opened the way a user opens it."""
+
+    def setUp(self):
+        self.env = Env()
+        self.env.boot()
+        self.env.run("HARNESS.openxp.card.ToggleStepList()")  # builds + shows it
+        self.list = "HARNESS.cardBits.list"
+
+    def test_open_list_gets_flareui_backdrop_and_gold_title(self):
+        env, lst = self.env, self.list
+        self.assertEqual(env.run(f"return {lst}:IsShown()"), True)
+        self.assertEqual(env.run(f"return {lst}.backdrop.edgeFile"), FLARE_FRAMES)
+        self.assertEqual(
+            env.run(f"local r,g,b,a = {lst}:GetBackdropBorderColor(); return r,g,b,a"),
+            BRONZE)
+        self.assertEqual(color_of(env, f"{lst}.title"), GOLD)
+        self.assertEqual(font_of(env, f"{lst}.title"), (FRIZQT, 13, ""))
+
+    def test_rows_are_colored_by_step_state(self):
+        env, lst = self.env, self.list
+        # the fake guide's current step is 4: row 4 is current (light blue),
+        # earlier rows are finished (green), later ones are plain (gold).
+        self.assertEqual(color_of(env, f"{lst}.rows[4].text"), FOCUS)
+        self.assertEqual(color_of(env, f"{lst}.rows[4].num"), FOCUS)
+        self.assertEqual(color_of(env, f"{lst}.rows[1].text"), GREEN)
+        self.assertEqual(color_of(env, f"{lst}.rows[1].num"), GREY_DONE)
+        self.assertEqual(color_of(env, f"{lst}.rows[5].text"), GOLD)
+        self.assertEqual(font_of(env, f"{lst}.rows[5].text"), (FRIZQT, 12, ""))
+        # finished rows carry a green DONE pill
+        self.assertEqual(color_of(env, f"{lst}.rows[1].pill.text"), GREEN)
+
+    def test_scrollbar_chrome_is_procedural_bronze(self):
+        env, lst = self.env, self.list
+        scroll = f"{lst}.oxpfuiScroll"
+        track, thumb = f"{scroll}.track", f"{scroll}.thumb"
+        self.assertNotEqual(env.run(f"return {scroll} == nil"), True)
+        # both drawn as colour textures: faint bronze track, solid bronze thumb
+        self.assertEqual(env.run(
+            f"local t = {track}; local r,g,b = t:GetVertexColor();"
+            "return r,g,b,t.__colorTexture and t.__colorTexture[4]"), (0.50, 0.38, 0.21, 0.25))
+        self.assertEqual(env.run(
+            f"local t = {thumb}; local r,g,b = t:GetVertexColor();"
+            "return r,g,b,t.__colorTexture and t.__colorTexture[4]"), (0.50, 0.38, 0.21, 1.0))
+        self.assertEqual(env.run(f"return {track}:GetWidth()"), 1)
+        self.assertEqual(env.run(f"return {thumb}:GetWidth()"), 3)
+        # chrome belongs to the list frame itself, never a new window
+        self.assertEqual(env.run(f"return {track}:GetParent() == HARNESS.cardBits.list"), True)
+        # 40 steps over 6 rows scrolls: both ends visible
+        self.assertEqual(env.run(f"return {track}:IsShown()"), True)
+        self.assertEqual(env.run(f"return {thumb}:IsShown()"), True)
+        # a thumb is never tiny
+        self.assertGreaterEqual(env.run(f"return {thumb}:GetHeight()"), 16)
+
+    def test_scrollbar_tracks_scrolling_and_hides_when_short(self):
+        env, lst = self.env, self.list
+        thumb = f"{lst}.oxpfuiScroll.thumb"
+        top = env.run(f"local _,_,_,_,y = {thumb}:GetPoint(1); return y")
+        # scroll near the bottom the way the mouse wheel does, then refresh
+        env.run(f"{lst}.offset = 34; HARNESS.openxp.card.FillStepList(); OXPFUI.Reapply('test')")
+        bottom = env.run(f"local _,_,_,_,y = {thumb}:GetPoint(1); return y")
+        self.assertLess(bottom, top)
+        # a short guide does not scroll: the chrome hides
+        env.run(f"{lst}.count = 6; OXPFUI.Reapply('test')")
+        self.assertEqual(env.run(f"return {lst}.oxpfuiScroll.track:IsShown()"), False)
+        self.assertEqual(env.run(f"return {thumb}:IsShown()"), False)
+
+    def test_list_keeps_flareui_look_after_refreshes(self):
+        env, lst = self.env, self.list
+        for call in ("HARNESS.openxp.card.Refresh(nil, true)",
+                     "HARNESS.openxp.card.ApplyFonts()",
+                     "HARNESS.openxp:RenderFrame()",
+                     "HARNESS.openxp:ReloadTheme()"):
+            env.run(call)
+            self.assertEqual(env.run(f"return {lst}.backdrop.edgeFile"), FLARE_FRAMES,
+                             f"list skin lost after {call}")
+            self.assertEqual(color_of(env, f"{lst}.rows[4].text"), FOCUS,
+                             f"row colors lost after {call}")
+
+    def test_border_style_setting_reaches_the_list(self):
+        env = Env(db={"borderStyle": "Thin"})
+        env.boot()
+        env.run("HARNESS.openxp.card.ToggleStepList()")
+        self.assertEqual(env.run("return HARNESS.cardBits.list.backdrop.edgeFile"), FLARE_THIN)
+        self.assertEqual(env.run("return HARNESS.cardBits.list.backdrop.edgeSize"), 8)
+
+
 if __name__ == "__main__":
     unittest.main()

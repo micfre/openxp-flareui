@@ -277,6 +277,15 @@ function card.FillStepList()
   end
 end
 
+local function refreshCard(force)
+  bump("card.Refresh")
+  if force then HARNESS.ApplyOpenXPLook() end
+end
+
+-- Set once the addon table exists; card functions defined before it reach
+-- the module table (the hooked refresh path) through this.
+local addonCard = nil
+
 function card.ToggleStepList()
   bump("card.ToggleStepList")
   card.BuildStepList()
@@ -284,9 +293,9 @@ function card.ToggleStepList()
   list:SetPoint("TOPLEFT", card, "TOPRIGHT", 4, 0)
   list:Show()
   card.FillStepList()
-  -- The real card's 0.25 s ticker refreshes right after a toggle; the fake
-  -- refreshes immediately so re-application is observable in tests.
-  card.Refresh(nil, true)
+  -- The real card's 0.25 s ticker refreshes right after a toggle (through
+  -- the module table, where hooks live); the fake refreshes immediately.
+  if addonCard and addonCard.Refresh then addonCard.Refresh(nil, true) end
 end
 
 -- Waypoint arrow (phase 1) --------------------------------------------------
@@ -485,8 +494,7 @@ addon.card = {
   BuildStepList = card.BuildStepList,
   FillStepList = card.FillStepList,
   ToggleStepList = card.ToggleStepList,
-  Refresh = function(_, force) bump("card.Refresh"); if force then HARNESS.ApplyOpenXPLook() end end,
-  SkinPanels = function() bump("card.SkinPanels")
+  Refresh = function(_, force) refreshCard(force) end,  SkinPanels = function() bump("card.SkinPanels")
     HARNESS.ApplyOpenXPLook()
   end,
   SkinPanel = function(_, f) bump("card.SkinPanel"); if f then applyOpenXPLook(f.__raw or f) end end,
@@ -495,6 +503,7 @@ addon.card = {
     HARNESS.ApplyOpenXPLook()
   end,
 }
+addonCard = addon.card
 
 -- The card's CurrentStep() reads this off the addon table.
 function addon.GetGuideProgress() return 4 end

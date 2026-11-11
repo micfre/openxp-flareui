@@ -90,4 +90,76 @@ function theme.ApplyTextColor(fs, colorName)
   fs:SetTextColor(c[1], c[2], c[3], 1)
 end
 
+-- ---------------------------------------------------------------------------
+-- Shared FlareUI chrome recipes (procedural, no art files)
+-- ---------------------------------------------------------------------------
+
+-- Unwrap an engine-guarded frame to the real frame, so chrome textures are
+-- parented and anchored to the frame the client knows (see Engine.lua).
+local function realFrame(frame)
+  if type(frame) ~= "table" then return nil end
+  return frame.__raw or frame
+end
+
+-- FlareUI's scrollbar: a 1px faint bronze track down the right margin and a
+-- 3px solid bronze thumb, both drawn with colour textures (ObjectiveTracker
+-- has no slider art either — its list is mouse-wheel scrolled).
+--   frame: the list's frame (guarded or raw)
+--   opts.state(): -> fraction (0..1 through the list), visibleRatio
+--                 (0..1 of the list that fits), scrollable (bool)
+-- Re-applied chrome is reused; nothing is resized except our own textures.
+function theme.ApplyScrollBar(frame, opts)
+  local rf = realFrame(frame)
+  if not (rf and rf.CreateTexture and rf.SetWidth) then return end
+  local chrome = rf.oxpfuiScroll
+  if not chrome then
+    local track = rf:CreateTexture(nil, "ARTWORK")
+    track:SetSnapToPixelGrid(false)
+    track:SetTexelSnappingBias(0)
+    track:SetWidth(1)
+    local thumb = rf:CreateTexture(nil, "OVERLAY")
+    thumb:SetSnapToPixelGrid(false)
+    thumb:SetTexelSnappingBias(0)
+    thumb:SetWidth(3)
+    chrome = { track = track, thumb = thumb }
+    rf.oxpfuiScroll = chrome
+  end
+  local box = theme.C.BOX
+  chrome.track:SetColorTexture(box[1], box[2], box[3], 0.25)
+  chrome.thumb:SetColorTexture(box[1], box[2], box[3], 1)
+  chrome.track:ClearAllPoints()
+  chrome.track:SetPoint("TOPRIGHT", rf, "TOPRIGHT", -6, -30)
+  chrome.track:SetPoint("BOTTOMRIGHT", rf, "BOTTOMRIGHT", -6, 8)
+
+  local fraction, visibleRatio, scrollable = 0, 1, false
+  if opts and opts.state then
+    local ok, frac, ratio, scroll = pcall(opts.state)
+    if ok then
+      fraction = frac or 0
+      visibleRatio = ratio or 1
+      scrollable = scroll and true or false
+    end
+  end
+  if fraction < 0 then fraction = 0 elseif fraction > 1 then fraction = 1 end
+  if visibleRatio < 0.05 then visibleRatio = 0.05 elseif visibleRatio > 1 then visibleRatio = 1 end
+
+  -- list body height: the frame minus its title row and bottom padding
+  local trackHeight = (rf:GetHeight() or 0) - 38
+  if trackHeight < 16 then trackHeight = 16 end
+  local thumbHeight = trackHeight * visibleRatio
+  if thumbHeight < 16 then thumbHeight = 16 end
+  local offset = (trackHeight - thumbHeight) * fraction
+  chrome.thumb:ClearAllPoints()
+  chrome.thumb:SetPoint("TOPRIGHT", chrome.track, "TOPRIGHT", -1, -offset)
+  chrome.thumb:SetHeight(thumbHeight)
+
+  if scrollable then
+    chrome.track:Show()
+    chrome.thumb:Show()
+  else
+    chrome.track:Hide()
+    chrome.thumb:Hide()
+  end
+end
+
 OXPFUI.theme = theme
