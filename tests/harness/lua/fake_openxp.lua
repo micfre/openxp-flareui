@@ -1289,6 +1289,153 @@ addon.inventoryManager = {
   clickFrame = junkHandler,
 }
 
+-- Tooltips (phase 2) — OpenXPTooltips.lua -----------------------------------
+-- Mirrors how OpenXP adds quest lines to Blizzard's GameTooltip: the module
+-- builds its lines with inline |c hex prefixes (GREEN/GREY/GOLD/WHITE/ORANGE,
+-- OpenXPTooltips.lua lines 19-20) inside tips.AddLines (unit tooltips) and
+-- tips.AddItemLines (item tooltips), which are pcall'ed from the
+-- OnTooltipSetUnit / OnTooltipSetItem script hooks OpenXP registers on the
+-- tooltip frames. What gets added is driven by HARNESS.tooltipScenario so
+-- tests control what the "guide" knows. Pristine copies let tests simulate
+-- OpenXP reinstalling its own functions (a refresh that wipes wraps).
+local GREEN, GREY, GOLD, WHITE = "|cFF66BB6A", "|cFF9E9E9E", "|cFFFFC107", "|cFFFFFFFF"
+local ORANGE = "|cFFFF8C1A"
+local QUEST_ICON = "Interface\\GossipFrame\\AvailableQuestIcon"
+
+HARNESS.tooltipScenario = {
+  -- Mob tooltips: items you still need (with the quest they are for) and a
+  -- guide step needing the NPC (AddLines, OpenXPTooltips.lua 360-399).
+  loot = {
+    { name = "Tough Condor Meat", title = "Elixir of Ferocity",
+      have = 1, need = 4, done = false, later = 5 },
+  },
+  kills = {
+    { title = "Kobold Vermin", have = 3, need = 8, done = false },
+  },
+  step = { index = 12, what = "Kill" },
+  -- Item tooltips: quests that need the item (AddItemLines, 426-441).
+  itemLines = {},
+}
+
+local function Progress(have, need, done)
+  return ((done or have >= need) and GREEN or WHITE) .. have .. "/" .. need .. "|r"
+end
+
+local function Icon(texture, size)
+  return "|T" .. tostring(texture) .. ":" .. (size or 14) .. "|t "
+end
+
+local tips = {}
+addon.openxpTooltips = tips
+
+function tips.AddLines(tooltip, unit)
+  bump("tips.AddLines")
+  if not unit or not UnitExists(unit) then return end
+  if UnitIsPlayer(unit) then return end
+  local sc = HARNESS.tooltipScenario or {}
+  local added = false
+  if UnitCanAttack("player", unit) then
+    local loot = sc.loot or {}
+    if #loot > 0 then
+      tooltip:AddLine(" ")
+      tooltip:AddLine(Icon(QUEST_ICON, 16) .. ORANGE .. "Loot for your quests" .. "|r")
+      for _, n in ipairs(loot) do
+        local left = Icon(QUEST_ICON) .. GOLD .. (n.name or "?") .. "|r"
+        tooltip:AddDoubleLine(left, Progress(n.have, n.need, n.done))
+        local sub = "    " .. GREY .. n.title
+        if n.later then sub = sub .. " (pick up at step " .. n.later .. ")" end
+        tooltip:AddLine(sub .. "|r")
+      end
+      added = true
+    else
+      for _, q in ipairs(sc.kills or {}) do
+        if not added then tooltip:AddLine(" "); added = true end
+        tooltip:AddDoubleLine((q.done and GREY or GOLD) .. q.title .. "|r",
+                              Progress(q.have, q.need, q.done))
+      end
+    end
+  end
+  local step = sc.step
+  if step then
+    if not added then tooltip:AddLine(" ") end
+    tooltip:AddLine(GREEN .. "OpenXP|r step " .. step.index .. GREY .. " - " .. step.what .. "|r")
+    added = true
+  end
+  if added then tooltip:Show() end
+end
+
+function tips.AddItemLines(tooltip, itemId)
+  bump("tips.AddItemLines")
+  if not itemId then return end
+  local lines = (HARNESS.tooltipScenario and HARNESS.tooltipScenario.itemLines) or {}
+  if #lines == 0 then return end
+  tooltip:AddLine(" ")
+  tooltip:AddLine(Icon(QUEST_ICON, 20) .. ORANGE .. "QUEST ITEM - DON'T SELL" .. "|r")
+  for _, q in ipairs(lines) do
+    local left = (q.done and GREY or GOLD) .. q.title .. "|r"
+    if q.later then left = left .. GREY .. " (pick up at step " .. q.later .. ")" .. "|r" end
+    tooltip:AddDoubleLine(left, Progress(q.have, q.need, q.done))
+  end
+  -- OpenXP's own gold border on item tooltips (its behaviour, not OXP-FUI's).
+  tips.SetBorder(tooltip, 1, 0.55, 0.1)
+  tooltip.openxpBorder = true
+  tooltip:Show()
+end
+
+function tips.SetBorder(tooltip, r, g, b)
+  local ns = tooltip.NineSlice
+  if ns and ns.SetBorderColor then
+    pcall(ns.SetBorderColor, ns, r, g, b)
+  elseif tooltip.SetBackdropBorderColor then
+    pcall(tooltip.SetBackdropBorderColor, tooltip, r, g, b)
+  end
+end
+
+local function ResetBorder(tooltip)
+  if tooltip.openxpBorder then
+    tooltip.openxpBorder = nil
+    local c = _G.TOOLTIP_DEFAULT_COLOR
+    tips.SetBorder(tooltip, c and c.r or 1, c and c.g or 1, c and c.b or 1)
+  end
+end
+
+local function OnUnitTooltip(tooltip)
+  if tooltip ~= GameTooltip then return end
+  local _, unit = tooltip:GetUnit()
+  unit = unit or (UnitExists("mouseover") and "mouseover")
+  ResetBorder(tooltip)
+  pcall(tips.AddLines, tooltip, unit)
+end
+
+local function OnItemTooltip(tooltip)
+  if tooltip ~= GameTooltip and tooltip ~= ItemRefTooltip then return end
+  local itemId = HARNESS.tooltipItem and HARNESS.tooltipItem.id or nil
+  ResetBorder(tooltip)
+  pcall(tips.AddItemLines, tooltip, itemId)
+end
+
+GameTooltip:HookScript("OnTooltipSetUnit", OnUnitTooltip)
+GameTooltip:HookScript("OnTooltipSetItem", OnItemTooltip)
+ItemRefTooltip:HookScript("OnTooltipSetItem", OnItemTooltip)
+GameTooltip:HookScript("OnHide", ResetBorder)
+ItemRefTooltip:HookScript("OnHide", ResetBorder)
+
+-- Pristine copies of the module functions (before any wrap).
+HARNESS.pristineTooltips = { AddLines = tips.AddLines, AddItemLines = tips.AddItemLines }
+
+-- Test drivers: the client fills the tooltip with the game's own lines
+-- first, then fires the set-unit/set-item script hooks.
+function HARNESS.TooltipSetUnit()
+  local fn = GameTooltip:GetScript("OnTooltipSetUnit")
+  if fn then fn(GameTooltip) end
+end
+
+function HARNESS.TooltipSetItem(tooltip)
+  tooltip = tooltip or GameTooltip
+  local fn = tooltip:GetScript("OnTooltipSetItem")
+  if fn then fn(tooltip) end
+end
+
 -- The two windows this harness creates lazily (see the phase 2 section
 -- above). Real signatures: welcome.Show(mode, lastSeen) / feedback.Show().
 addon.welcome = {

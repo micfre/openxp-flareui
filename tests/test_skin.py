@@ -198,9 +198,20 @@ class Exclusions(unittest.TestCase):
         env.run("HARNESS.openxp:ReloadTheme()")
         for frame in ("RXPFrame", "RXPFrame_bottomFrame", "RXPFrameGuideName",
                       "RXPG_MenuFrame", "RXP_MMMenuFrame", "RXP_WMMenuFrame",
-                      "RXP_WMMenuFrame_MenuFrame", "GameTooltip", "ItemRefTooltip",
-                      "WorldMapFrame", "Minimap", "AnotherAddonFrame", "BugSackFrame"):
+                      "RXP_WMMenuFrame_MenuFrame", "WorldMapFrame", "Minimap",
+                      "AnotherAddonFrame", "BugSackFrame"):
             self.assertEqual(env.calls_made_on(frame), 0, f"{frame} was touched")
+        # The tooltip frames are excluded too (story 18/43): drive a full unit
+        # tooltip — Blizzard line, then OpenXP's quest lines, styled — and
+        # assert the frame itself was never modified.
+        env.run("HARNESS.units.mouseover = { name = 'Forest Lurker', attackable = true }")
+        env.run("GameTooltip:ClearLines()")
+        env.run("GameTooltip:AddLine('Forest Lurker')")
+        env.run("HARNESS.TooltipSetUnit()")
+        for frame in ("GameTooltip", "ItemRefTooltip"):
+            for method in TOOLTIP_FRAME_METHODS:
+                self.assertEqual(env.calls_made_on(frame, method), 0,
+                                 f"{frame}:{method} was called")
         env.slash("/oxpfui debug")
         report = "\n".join(env.chat())
         self.assertIn("frame not skinnable: GameTooltip", report)
@@ -261,10 +272,16 @@ class LoadsQuietly(unittest.TestCase):
         env.run("HARNESS.openxp:RenderFrame()")
         for frame in ("RXPFrame", "RXPFrame_bottomFrame", "RXPFrameGuideName",
                       "RXPG_MenuFrame", "RXP_MMMenuFrame", "RXP_WMMenuFrame",
-                      "RXP_WMMenuFrame_MenuFrame", "GameTooltip", "ItemRefTooltip",
-                      "WorldMapFrame", "Minimap", "AnotherAddonFrame", "BugSackFrame"):
+                      "RXP_WMMenuFrame_MenuFrame", "WorldMapFrame", "Minimap",
+                      "AnotherAddonFrame", "BugSackFrame"):
             self.assertEqual(env.calls_made_on(frame), 0,
                              f"{frame} was touched while the master switch is off")
+        # The tooltip frames keep OpenXP's own hook registrations (they are
+        # OpenXP's, not ours) but are never modified by OXP-FUI.
+        for frame in ("GameTooltip", "ItemRefTooltip"):
+            for method in TOOLTIP_FRAME_METHODS:
+                self.assertEqual(env.calls_made_on(frame, method), 0,
+                                 f"{frame}:{method} while the master switch is off")
 
 
 class RefreshReapply(unittest.TestCase):
@@ -537,6 +554,19 @@ def _layout_count_lua(frame_expr: str, method: str) -> str:
     return (f"local n = 0; local f = {frame_expr}; "
             f"if f then for _, c in ipairs(f.__calls) do "
             f"if c[1] == {method!r} then n = n + 1 end end end; return n")
+
+# Story 43 for the tooltip frames: OpenXP itself registers script hooks on
+# GameTooltip/ItemRefTooltip at load, so "no call at all" is not the invariant
+# there — "the frame is never modified" is. Any of these methods would change
+# the frame itself (backdrop, size, position, strata, ...).
+TOOLTIP_FRAME_METHODS = (
+    "SetBackdrop", "SetBackdropColor", "SetBackdropBorderColor",
+    "SetPoint", "SetAllPoints", "ClearAllPoints",
+    "SetSize", "SetWidth", "SetHeight", "SetScale",
+    "SetFrameStrata", "SetFrameLevel", "SetAlpha", "SetMovable",
+    "SetClampedToScreen", "SetToplevel", "SetHitRectInsets",
+    "StartMoving", "StartSizing",
+)
 
 # The whole Quest Targets family (spec story 11): the frame, its title strip,
 # the section labels and the secure target rows.
@@ -1682,6 +1712,294 @@ class InventoryManagerWindow(unittest.TestCase):
             self.assertEqual(env.calls_made_on(f, m), count,
                              f"{f}:{m} was called by the skin")
 
+
+class Tooltips(unittest.TestCase):
+    """Ticket #9 (stories 17-18): only the quest lines OpenXP adds to
+    mob/NPC/item tooltips get the FlareUI palette and typography. Blizzard's
+    tooltip frame, Blizzard's own lines and other addons' lines (Questie) are
+    never touched."""
+
+    MOUSEOVER = ("HARNESS.units.mouseover = { name = 'Forest Lurker',"
+                 " guid = 'Creature-0-0-0-123-999-0000A0B2C', attackable = true }")
+
+    def hover_unit(self, env, blizzard_lines=("Forest Lurker", "Level 5 Humanoid")):
+        """Play the client: fill the tooltip's own lines, then fire the
+        OnTooltipSetUnit hooks OpenXP registered (which add its quest lines)."""
+        env.run(self.MOUSEOVER)
+        env.run("GameTooltip:ClearLines()")
+        for line in blizzard_lines:
+            env.run(f"GameTooltip:AddLine({line!r})")
+        env.run("HARNESS.TooltipSetUnit()")
+
+    def test_openxp_added_lines_get_flareui_font_colour_and_shadow(self):
+        env = Env()
+        env.boot()
+        self.hover_unit(env, blizzard_lines=(
+            "Forest Lurker",                       # Blizzard: unit name
+            "Level 5 Humanoid",                    # Blizzard: level line
+            "Questie: Kobold Vermin 3/8",          # another addon's line
+        ))
+        # OpenXP appended: 4 spacer, 5 header, 6 item name + progress,
+        # 7 quest sub-line, 8 guide step.
+        # Header ("Loot for your quests"): OpenXP orange -> FlareUI zone
+        # bronze, title typography, 1px black shadow, icon kept.
+        header = env.run("return GameTooltipTextLeft5:GetText()")
+        self.assertIn("|cFFCC9957", header)
+        self.assertNotIn("|cFFFF8C1A", header)
+        self.assertIn("|TInterface\\GossipFrame\\AvailableQuestIcon:16|t", header)
+        self.assertEqual(env.run(
+            "local p,s,f = GameTooltipTextLeft5:GetFont(); return p,s,f"),
+            (FRIZQ, 12, ""))
+        self.assertEqual(env.run(
+            "local x,y = GameTooltipTextLeft5:GetShadowOffset(); return x,y"), (1, -1))
+        self.assertEqual(env.run(
+            "local r,g,b,a = GameTooltipTextLeft5:GetShadowColor(); return r,g,b,a"),
+            (0.0, 0.0, 0.0, 1.0))
+        self.assertEqual(env.run(
+            "local r,g,b,a = GameTooltipTextLeft5:GetTextColor(); return r,g,b,a"),
+            (0.80, 0.60, 0.34, 1.0))
+        # Item name: OpenXP gold -> FlareUI gold; body typography.
+        loot = env.run("return GameTooltipTextLeft6:GetText()")
+        self.assertIn("|cFFFFD100", loot)
+        self.assertNotIn("|cFFFFC107", loot)
+        self.assertEqual(env.run(
+            "local p,s,f = GameTooltipTextLeft6:GetFont(); return p,s,f"),
+            (FRIZQ, 11, ""))
+        # Progress counter (right side of the double line): white -> light grey.
+        self.assertEqual(env.run("return GameTooltipTextRight6:GetText()"),
+                         "|cFFD9D9D91/4|r")
+        self.assertEqual(env.run(
+            "local p,s,f = GameTooltipTextRight6:GetFont(); return p,s,f"),
+            (FRIZQ, 11, ""))
+        # Quest sub-line: OpenXP grey -> FlareUI dim grey.
+        sub = env.run("return GameTooltipTextLeft7:GetText()")
+        self.assertIn("|cFF8C8C8C", sub)
+        self.assertNotIn("|cFF9E9E9E", sub)
+        # Guide step line: OpenXP badge green -> FlareUI green, suffix dim,
+        # and the un-escaped " step 12" segment keeps its meaning.
+        step = env.run("return GameTooltipTextLeft8:GetText()")
+        self.assertIn("|cFF21FF21OpenXP|r step 12", step)
+        self.assertIn("|cFF8C8C8C - Kill|r", step)
+        self.assertNotIn("|cFF66BB6A", step)
+        # Quiet: no chat output from any of this.
+        self.assertEqual(env.chat(), [])
+
+    def test_blizzard_and_other_addon_lines_keep_their_own_look(self):
+        env = Env()
+        env.boot()
+        env.run(self.MOUSEOVER)
+        env.run("GameTooltip:ClearLines()")
+        env.run(f"GameTooltip:AddLine('Forest Lurker')")
+        env.run(f"GameTooltipTextLeft1:SetFont({FRIZQ!r}, 13, 'OUTLINE')")
+        env.run("GameTooltipTextLeft1:SetTextColor(1, 1, 1)")
+        env.run("GameTooltip:AddLine('Questie: Kobold Vermin 3/8')")
+        env.run("GameTooltipTextLeft2:SetFont('Fonts\\\\ARIALN.TTF', 10, '')")
+        env.run("GameTooltipTextLeft2:SetTextColor(0.4, 0.8, 1)")
+        env.run("HARNESS.TooltipSetUnit()")
+        # Lines OpenXP did not add are untouched: same text, font and colour,
+        # and no extra styling call reached them.
+        for line, text, font, size, flags, color in (
+            ("GameTooltipTextLeft1", "Forest Lurker", FRIZQ, 13, "OUTLINE", (1.0, 1.0, 1.0)),
+            ("GameTooltipTextLeft2", "Questie: Kobold Vermin 3/8", "Fonts\\ARIALN.TTF", 10, "", (0.4, 0.8, 1.0)),
+        ):
+            self.assertEqual(env.run(f"return {line}:GetText()"), text)
+            self.assertEqual(env.run(
+                f"local p,s,f = {line}:GetFont(); return p,s,f"), (font, size, flags))
+            self.assertEqual(env.run(
+                f"local r,g,b,a = {line}:GetTextColor(); return r,g,b,a"),
+                (*color, 1.0))
+            # One SetText (from AddLine) and one font call (the test's own):
+            # if OXP-FUI had styled the line there would be more.
+            self.assertEqual(env.calls_made_on(line, "SetText"), 1)
+            self.assertEqual(env.calls_made_on(line, "SetFont"), 1)
+            self.assertEqual(env.calls_made_on(line, "SetShadowOffset"), 0)
+
+    def test_item_tooltip_lines_are_styled_and_openxp_border_kept(self):
+        env = Env()
+        env.boot()
+        env.run("""
+          HARNESS.tooltipScenario.itemLines = {
+            { title = 'Elixir of Ferocity', have = 1, need = 4, done = false, later = 5 },
+          }
+          HARNESS.tooltipItem = { id = 15264, name = 'Tough Condor Meat' }
+        """)
+        env.run("GameTooltip:ClearLines()")
+        env.run("GameTooltip:AddLine('Tough Condor Meat')")
+        env.run("HARNESS.TooltipSetItem()")
+        # Line 2 spacer, 3 header, 4 quest title + progress.
+        header = env.run("return GameTooltipTextLeft3:GetText()")
+        self.assertIn("|cFFCC9957", header)
+        self.assertIn("QUEST ITEM - DON'T SELL", header)
+        left = env.run("return GameTooltipTextLeft4:GetText()")
+        self.assertIn("|cFFFFD100Elixir of Ferocity|r", left)
+        self.assertIn("|cFF8C8C8C (pick up at step 5)|r", left)
+        self.assertEqual(env.run("return GameTooltipTextRight4:GetText()"),
+                         "|cFFD9D9D91/4|r")
+        self.assertEqual(env.run(
+            "local p,s,f = GameTooltipTextLeft4:GetFont(); return p,s,f"),
+            (FRIZQ, 11, ""))
+        # OpenXP's own gold border on item tooltips is OpenXP's behaviour:
+        # exactly its one call, un-interfered with by OXP-FUI.
+        self.assertEqual(env.calls_made_on("GameTooltip", "SetBackdropBorderColor"), 1)
+        self.assertEqual(env.run(
+            "local r,g,b,a = GameTooltip:GetBackdropBorderColor(); return r,g,b,a"),
+            (1.0, 0.55, 0.1, 1.0))
+        self.assertEqual(env.chat(), [])
+
+    def test_game_tooltip_frame_itself_is_never_modified(self):
+        env = Env()
+        env.boot()
+        self.hover_unit(env)
+        for frame in ("GameTooltip", "ItemRefTooltip"):
+            for method in TOOLTIP_FRAME_METHODS:
+                self.assertEqual(env.calls_made_on(frame, method), 0,
+                                 f"{frame}:{method} was called")
+
+    def test_per_window_switch_off_leaves_openxp_lines_alone(self):
+        env = Env(db={"windows": {"tooltips": False}})
+        env.boot()
+        self.hover_unit(env, blizzard_lines=(
+            "Forest Lurker", "Level 5 Humanoid", "Questie: Kobold Vermin 3/8"))
+        # OpenXP still adds its lines with its own look: inline codes kept,
+        # no font, no shadow, no base colour set.
+        self.assertIn("|cFFFF8C1A", env.run("return GameTooltipTextLeft5:GetText()"))
+        self.assertIsNone(env.run("return GameTooltipTextLeft5:GetFont()"))
+        self.assertEqual(env.calls_made_on("GameTooltipTextLeft5", "SetFont"), 0)
+        self.assertEqual(env.calls_made_on("GameTooltipTextLeft5", "SetTextColor"), 0)
+        self.assertEqual(env.chat(), [])
+        env.slash("/oxpfui debug")
+        self.assertIn("window 'tooltips' is switched off", "\n".join(env.chat()))
+
+    def test_master_switch_off_leaves_openxp_lines_alone(self):
+        env = Env(db={"enabled": False})
+        env.boot()
+        self.hover_unit(env, blizzard_lines=(
+            "Forest Lurker", "Level 5 Humanoid", "Questie: Kobold Vermin 3/8"))
+        self.assertIn("|cFFFF8C1A", env.run("return GameTooltipTextLeft5:GetText()"))
+        self.assertEqual(env.calls_made_on("GameTooltipTextLeft5", "SetFont"), 0)
+        self.assertEqual(env.chat(), [])
+
+
+    def test_missing_openxp_tooltip_module_is_skipped_quietly(self):
+        # A future OpenXP rename removes the whole tooltips module.
+        env = Env()
+        env.run("HARNESS.openxp.openxpTooltips = nil")
+        env.boot()
+        env.run("HARNESS.openxp:RenderFrame()")  # refresh paths stay safe too
+        # Tooltips still work, OpenXP's own look, no error, no chat.
+        self.hover_unit(env, blizzard_lines=(
+            "Forest Lurker", "Level 5 Humanoid", "Questie: Kobold Vermin 3/8"))
+        self.assertIn("|cFFFF8C1A", env.run("return GameTooltipTextLeft5:GetText()"))
+        self.assertEqual(env.calls_made_on("GameTooltipTextLeft5", "SetFont"), 0)
+        self.assertEqual(env.chat(), [])
+        env.slash("/oxpfui debug")
+        report = "\n".join(env.chat())
+        self.assertIn("OpenXP tooltip module not found", report)
+        self.assertIn("Errors: none", report)
+
+    def test_partially_missing_tooltip_module_wraps_what_exists(self):
+        # Version drift removes only the item function: unit lines are still
+        # skinned, item lines keep OpenXP's look, the gap is logged.
+        env = Env()
+        env.run("HARNESS.openxp.openxpTooltips.AddItemLines = nil")
+        env.boot()
+        self.hover_unit(env, blizzard_lines=(
+            "Forest Lurker", "Level 5 Humanoid", "Questie: Kobold Vermin 3/8"))
+        self.assertIn("|cFFCC9957", env.run("return GameTooltipTextLeft5:GetText()"))
+        env.run("""
+          HARNESS.tooltipScenario.itemLines = {
+            { title = 'Elixir of Ferocity', have = 1, need = 4, done = false },
+          }
+          HARNESS.tooltipItem = { id = 15264, name = 'Tough Condor Meat' }
+        """)
+        env.run("GameTooltip:ClearLines()")
+        env.run("GameTooltip:AddLine('Tough Condor Meat')")
+        env.run("HARNESS.TooltipSetItem()")  # a no-op: OpenXP's function is gone
+        self.assertEqual(env.run("return GameTooltip:NumLines()"), 1)
+        self.assertEqual(env.chat(), [])
+        env.slash("/oxpfui debug")
+        self.assertIn("OpenXP tooltip function AddItemLines not found",
+                      "\n".join(env.chat()))
+
+    def test_turning_the_window_off_mid_session_stops_styling_new_lines(self):
+        env = Env()
+        env.boot()
+        self.hover_unit(env, blizzard_lines=(
+            "Forest Lurker", "Level 5 Humanoid", "Questie: Kobold Vermin 3/8"))
+        self.assertIn("|cFFCC9957", env.run("return GameTooltipTextLeft5:GetText()"))
+        env.slash("/oxpfui")
+        env.run("OXPFUIPanel.windowBtns['tooltips']:Click()")  # off (+ re-apply)
+        self.hover_unit(env, blizzard_lines=(
+            "Forest Lurker", "Level 5 Humanoid", "Questie: Kobold Vermin 3/8"))
+        # A fresh tooltip keeps OpenXP's own look for its added lines.
+        self.assertIn("|cFFFF8C1A", env.run("return GameTooltipTextLeft5:GetText()"))
+        self.assertEqual(env.calls_made_on("GameTooltipTextLeft5", "SetFont"), 0)
+        # And switching it back on styles the next tooltip again.
+        env.run("OXPFUIPanel.windowBtns['tooltips']:Click()")  # on (+ re-apply)
+        self.hover_unit(env, blizzard_lines=(
+            "Forest Lurker", "Level 5 Humanoid", "Questie: Kobold Vermin 3/8"))
+        self.assertIn("|cFFCC9957", env.run("return GameTooltipTextLeft5:GetText()"))
+
+    def test_turning_master_off_mid_session_stops_styling_new_lines(self):
+        env = Env()
+        env.boot()
+        self.hover_unit(env, blizzard_lines=(
+            "Forest Lurker", "Level 5 Humanoid", "Questie: Kobold Vermin 3/8"))
+        env.slash("/oxpfui")
+        env.run("OXPFUIPanel.masterBtn:Click()")  # master off
+        self.hover_unit(env, blizzard_lines=(
+            "Forest Lurker", "Level 5 Humanoid", "Questie: Kobold Vermin 3/8"))
+        self.assertIn("|cFFFF8C1A", env.run("return GameTooltipTextLeft5:GetText()"))
+        self.assertEqual(env.calls_made_on("GameTooltipTextLeft5", "SetFont"), 0)
+        self.assertEqual(env.chat(), [])
+
+    def test_skin_is_rehooked_after_openxp_reinstalls_its_tooltip_functions(self):
+        env = Env()
+        env.boot()
+        self.hover_unit(env, blizzard_lines=(
+            "Forest Lurker", "Level 5 Humanoid", "Questie: Kobold Vermin 3/8"))
+        self.assertIn("|cFFCC9957", env.run("return GameTooltipTextLeft5:GetText()"))
+        # OpenXP "refreshes" and reinstalls its own functions, wiping the wrap.
+        env.run("""
+          HARNESS.openxp.openxpTooltips.AddLines = HARNESS.pristineTooltips.AddLines
+          HARNESS.openxp.openxpTooltips.AddItemLines = HARNESS.pristineTooltips.AddItemLines
+        """)
+        self.hover_unit(env, blizzard_lines=(
+            "Forest Lurker", "Level 5 Humanoid", "Questie: Kobold Vermin 3/8"))
+        self.assertIn("|cFFFF8C1A", env.run("return GameTooltipTextLeft5:GetText()"))
+        # Any OpenXP refresh triggers a re-apply pass that re-wraps.
+        for refresh in ("HARNESS.openxp:RenderFrame()", "HARNESS.openxp:ReloadTheme()"):
+            with self.subTest(refresh=refresh):
+                env.run(refresh)
+                self.hover_unit(env, blizzard_lines=(
+                    "Forest Lurker", "Level 5 Humanoid", "Questie: Kobold Vermin 3/8"))
+                self.assertIn("|cFFCC9957",
+                              env.run("return GameTooltipTextLeft5:GetText()"),
+                              f"skin lost after {refresh}")
+                # Exactly one styling pass per show: AddLine's SetText plus
+                # the skin's recolour — a stacked wrap would recolour twice.
+                self.assertEqual(env.calls_made_on("GameTooltipTextLeft5", "SetText"), 2)
+
+    def test_chosen_font_is_used_on_tooltip_lines(self):
+        env = Env(db={"font": "Roboto Condensed"})
+        env.boot()
+        self.hover_unit(env, blizzard_lines=(
+            "Forest Lurker", "Level 5 Humanoid", "Questie: Kobold Vermin 3/8"))
+        self.assertEqual(env.run("return (GameTooltipTextLeft5:GetFont())"),
+                         "Interface\\AddOns\\OXP-FUI\\Media\\Fonts\\RobotoCondensed-Regular.ttf")
+
+    def test_tooltip_lines_are_styled_even_in_combat(self):
+        # Tooltip line font strings are not secure frames: no deferral.
+        env = Env()
+        env.set_combat(True)
+        env.boot()
+        self.hover_unit(env, blizzard_lines=(
+            "Forest Lurker", "Level 5 Humanoid", "Questie: Kobold Vermin 3/8"))
+        self.assertIn("|cFFCC9957", env.run("return GameTooltipTextLeft5:GetText()"))
+        self.assertEqual(env.run(
+            "local p,s,f = GameTooltipTextLeft5:GetFont(); return p,s,f"),
+            (FRIZQ, 12, ""))
+        self.assertEqual(env.chat(), [])
 
 if __name__ == "__main__":
     unittest.main()

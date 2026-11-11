@@ -16,6 +16,9 @@
 --     reached by walking OpenXP's addon table; denied names return nil)
 --   ctx.OpenXP()            -> OpenXP's shared addon table (may be nil)
 --   ctx.theme / ctx.db      -> OXPFUI.theme / OXPFUI.db
+--   ctx.Skip(reason)        -> record a quiet skip for /oxpfui debug; for
+--     skins whose target is not a _G frame (hook-based skins wrapping
+--     OpenXP module functions, e.g. the tooltip-quest-lines skin)
 --
 -- Guarded frames refuse layout calls (SetPoint/SetSize/SetWidth/SetHeight/
 -- SetScale/...): OXP-FUI never moves or resizes an OpenXP frame, by
@@ -267,6 +270,11 @@ local function ApplySkin(def, reason)
         return nil
       end
       return Guard(raw, name, def.name)
+    end,
+    -- Hook-based skins (no _G frame of their own to resolve) report quiet
+    -- skips through here so /oxpfui debug tells the same story.
+    Skip = function(reason)
+      Log("skip", def.name, tostring(reason))
     end,
   }
 
