@@ -27,6 +27,23 @@ theme.C = {
                                      -- used where a plain texture is tinted
 }
 
+-- OpenXP's own blue accent (90/255, 184/255, 1 — its COLORS tables and the
+-- card art it tints), retinted to FlareUI amber/bronze by the card and the
+-- welcome/feedback skins. One shared definition — with one shared
+-- near-match tolerance — so every skin agrees what counts as "OpenXP blue".
+theme.OXP_BLUE = { 90 / 255, 184 / 255, 1 }
+
+-- Near-match tolerance when comparing a vertex/text colour against a
+-- palette triple: the palettes are set as exact constants, so this only
+-- absorbs float noise.
+local COLOR_EPS = 1 / 64
+
+function theme.NearColor(r, g, b, target)
+  return math.abs(r - target[1]) <= COLOR_EPS
+    and math.abs(g - target[2]) <= COLOR_EPS
+    and math.abs(b - target[3]) <= COLOR_EPS
+end
+
 -- Typography: header 13 / title 12 / body 11, no outline, 1px black shadow.
 theme.FONT_SIZES = { header = 13, title = 12, body = 11 }
 

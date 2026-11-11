@@ -29,16 +29,14 @@ local function fields(obj, ...)
   return true
 end
 
--- OpenXP's own blue accent (90/255, 184/255, 1) becomes FlareUI amber.
-local OXP_BLUE = { 90 / 255, 184 / 255, 1 }
+-- OpenXP's blue label accent (a lighter blue it uses on button icons) also
+-- becomes amber; the main accent blue itself is theme.OXP_BLUE.
 local OXP_BLUE_LABEL = { 159 / 255, 212 / 255, 1 }
-
-local function near(a, b) return math.abs(a - b) < 0.01 end
 
 local function matches(tex, triple)
   local ok, r, g, b = pcall(tex.GetVertexColor, tex)
   if not ok or r == nil then return false end
-  return near(r, triple[1]) and near(g, triple[2]) and near(b, triple[3])
+  return theme.NearColor(r, g, b, triple)
 end
 
 local function setVertex(tex, triple, a)
@@ -49,7 +47,7 @@ end
 
 -- Re-tint a texture only while OpenXP still has it in the blue accent.
 local function amberIfBlue(tex, alpha)
-  if tex and matches(tex, OXP_BLUE) then setVertex(tex, C.ZONE, alpha) end
+  if tex and matches(tex, theme.OXP_BLUE) then setVertex(tex, C.ZONE, alpha) end
 end
 
 local function text(fs, colorName, kind)
@@ -195,7 +193,7 @@ local function skinBar(bar)
     if btn then
       theme.ApplyBoxButtonPaint(btn)
       text(btn.label, "OBJECTIVE", "body")
-      if btn.bg and matches(btn.bg, OXP_BLUE) then
+      if btn.bg and matches(btn.bg, theme.OXP_BLUE) then
         setVertex(btn.bg, C.ZONE, 0.16)  -- labelled buttons' blue wash -> amber
       end
       if btn.icon and matches(btn.icon, OXP_BLUE_LABEL) then
@@ -207,7 +205,7 @@ end
 
 local function skinXPStrip(xpStrip)
   -- rested XP is drawn in the blue accent: amber keeps the meaning
-  if xpStrip and xpStrip.rested and matches(xpStrip.rested, OXP_BLUE) then
+  if xpStrip and xpStrip.rested and matches(xpStrip.rested, theme.OXP_BLUE) then
     setVertex(xpStrip.rested, C.ZONE, 0.35)
   end
 end
