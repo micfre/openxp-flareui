@@ -789,5 +789,145 @@ class QuestTargets(unittest.TestCase):
                              f"{f}:{m} was called by the skin")
 
 
+class TrackerSplits(unittest.TestCase):
+    """Ticket #7 (story 15): the shipped leveling-tracker skin, observed
+    only through the skin seam. Two windows: the level-splits frame (global
+    RXPLevelSplits family) and the leveling report panel (AceGUI widgets
+    reached through OpenXP's addon table)."""
+
+    # -- the FlareUI look after login ---------------------------------------
+
+    def test_splits_frame_and_title_get_flareui_look_after_login(self):
+        env = Env()
+        env.boot()
+        # Frame: bronze border (border-style setting), warm dark fill
+        # (opacity setting).
+        self.assertEqual(env.run("return RXPLevelSplits.backdrop.edgeFile"), FLAREUI_EDGE)
+        self.assertEqual(env.run("return RXPLevelSplits.backdrop.edgeSize"), 16)
+        self.assertEqual(env.run(
+            "local r,g,b,a = RXPLevelSplits:GetBackdropBorderColor(); return r,g,b,a"),
+            (0.65, 0.49, 0.27, 1.0))
+        self.assertEqual(env.run(
+            "local r,g,b,a = RXPLevelSplits:GetBackdropColor(); return r,g,b,a"),
+            (1.0, 1.0, 1.0, 0.6))
+        # Title strip: same backdrop, "Level splits" in gold header
+        # typography with the 1px black shadow of the selected font.
+        self.assertEqual(env.run("return RXPLevelSplits_title.backdrop.edgeFile"), FLAREUI_EDGE)
+        self.assertEqual(env.run(
+            "local p,s,f = RXPLevelSplits_title.text:GetFont(); return p,s,f"),
+            (FRIZQ, 13, ""))
+        self.assertEqual(env.run(
+            "local r,g,b,a = RXPLevelSplits_title.text:GetTextColor(); return r,g,b,a"),
+            (1.0, 0.82, 0.0, 1.0))
+        self.assertEqual(env.run(
+            "local x,y = RXPLevelSplits_title.text:GetShadowOffset(); return x,y"), (1, -1))
+        self.assertEqual(env.run(
+            "local r,g,b,a = RXPLevelSplits_title.text:GetShadowColor(); return r,g,b,a"),
+            (0.0, 0.0, 0.0, 1.0))
+        # Quiet: no chat output.
+        self.assertEqual(env.chat(), [])
+
+    def test_splits_labels_and_cogwheel_get_flareui_palette(self):
+        env = Env()
+        env.boot()
+        # The XP/level splits text: FlareUI typography at body size, palette
+        # by meaning — past splits finished grey, the current split light
+        # blue, the total light grey.
+        expected = {
+            "history": (0.55, 0.55, 0.55, 1.0),
+            "current": (0.40, 0.80, 1.0, 1.0),
+            "total": (0.85, 0.85, 0.85, 1.0),
+        }
+        for key, colour in expected.items():
+            self.assertEqual(env.run(
+                f"local p,s,f = RXPLevelSplits[{key!r}].label:GetFont(); return p,s,f"),
+                (FRIZQ, 11, ""), f"{key} font")
+            self.assertEqual(env.run(
+                f"local r,g,b,a = RXPLevelSplits[{key!r}].label:GetTextColor(); return r,g,b,a"),
+                colour, f"{key} colour")
+            self.assertEqual(env.run(
+                f"local x,y = RXPLevelSplits[{key!r}].label:GetShadowOffset(); return x,y"),
+                (1, -1), f"{key} shadow")
+        # The cogwheel icon on the title strip is tinted FlareUI bronze.
+        self.assertEqual(env.run(
+            "local t = RXPLevelSplits_titleCogwheel:GetNormalTexture();"
+            "local c = t.__vertexColor; return c[1],c[2],c[3],c[4]"),
+            (0.80, 0.60, 0.34, 1.0))
+        # Its art is still OpenXP's own cog.
+        self.assertEqual(env.run(
+            "return (RXPLevelSplits_titleCogwheel:GetNormalTexture():GetTexture())"),
+            "Interface\\AddOns\\OpenXP\\Textures\\Minimal\\rxp_cog-32")
+        self.assertEqual(env.chat(), [])
+
+    def test_report_panel_gets_flareui_look_after_login(self):
+        env = Env()
+        env.boot()
+        panel = "HARNESS.openxp.tracker.ui['CharacterFrame']"
+        # Window frame: bronze border, warm dark fill (the AceGUI frame is
+        # unnamed; the skin reaches it through OpenXP's addon table).
+        self.assertEqual(env.run(f"return {panel}.frame.backdrop.edgeFile"), FLAREUI_EDGE)
+        self.assertEqual(env.run(f"return {panel}.frame.backdrop.edgeSize"), 16)
+        self.assertEqual(env.run(
+            f"local r,g,b,a = {panel}.frame:GetBackdropBorderColor(); return r,g,b,a"),
+            (0.65, 0.49, 0.27, 1.0))
+        self.assertEqual(env.run(
+            f"local r,g,b,a = {panel}.frame:GetBackdropColor(); return r,g,b,a"),
+            (1.0, 1.0, 1.0, 0.6))
+        # Window title: gold header typography with the 1px shadow.
+        self.assertEqual(env.run(
+            f"local p,s,f = {panel}.titletext:GetFont(); return p,s,f"),
+            (FRIZQ, 13, ""))
+        self.assertEqual(env.run(
+            f"local r,g,b,a = {panel}.titletext:GetTextColor(); return r,g,b,a"),
+            (1.0, 0.82, 0.0, 1.0))
+        self.assertEqual(env.run(
+            f"local x,y = {panel}.titletext:GetShadowOffset(); return x,y"), (1, -1))
+        # The level-range button text ("41 to 42"): gold XP/level headline.
+        self.assertEqual(env.run(
+            f"local p,s,f = {panel}.levelButton.text:GetFont(); return p,s,f"),
+            (FRIZQ, 12, ""))
+        self.assertEqual(env.run(
+            f"local r,g,b,a = {panel}.levelButton.text:GetTextColor(); return r,g,b,a"),
+            (1.0, 0.82, 0.0, 1.0))
+        # Section headings: FlareUI zone bronze at title size, their divider
+        # art tinted bronze; data labels: light grey body text.
+        headings = ("reachedContainer", "speedContainer", "zonesContainer",
+                    "sourcesContainer", "teamworkContainer", "extrasContainer")
+        for key in headings:
+            self.assertEqual(env.run(
+                f"local p,s,f = {panel}[{key!r}].label.label:GetFont(); return p,s,f"),
+                (FRIZQ, 12, ""), f"{key} heading font")
+            self.assertEqual(env.run(
+                f"local r,g,b,a = {panel}[{key!r}].label.label:GetTextColor(); return r,g,b,a"),
+                (0.80, 0.60, 0.34, 1.0), f"{key} heading colour")
+            for side in ("left", "right"):
+                self.assertEqual(env.run(
+                    f"local t = {panel}[{key!r}].label[{side!r}];"
+                    "local c = t.__vertexColor; return c[1],c[2],c[3],c[4]"),
+                    (0.80, 0.60, 0.34, 1.0), f"{key} {side} divider tint")
+        for key in ("reachedContainer", "speedContainer", "zonesContainer",
+                    "extrasContainer"):
+            self.assertEqual(env.run(
+                f"local p,s,f = {panel}[{key!r}].data.label:GetFont(); return p,s,f"),
+                (FRIZQ, 11, ""), f"{key} data font")
+            self.assertEqual(env.run(
+                f"local r,g,b,a = {panel}[{key!r}].data.label:GetTextColor(); return r,g,b,a"),
+                (0.85, 0.85, 0.85, 1.0), f"{key} data colour")
+        for key, subkeys in (("sourcesContainer", ("quests", "mobs")),
+                             ("teamworkContainer", ("solo", "group"))):
+            for sub in subkeys:
+                self.assertEqual(env.run(
+                    f"local p,s,f = {panel}[{key!r}].data[{sub!r}].label:GetFont(); return p,s,f"),
+                    (FRIZQ, 11, ""), f"{key}.{sub} data font")
+                self.assertEqual(env.run(
+                    f"local r,g,b,a = {panel}[{key!r}].data[{sub!r}].label:GetTextColor(); return r,g,b,a"),
+                    (0.85, 0.85, 0.85, 1.0), f"{key}.{sub} data colour")
+        # The player-name headline: light grey body text.
+        self.assertEqual(env.run(
+            f"local r,g,b,a = {panel}.target.label:GetTextColor(); return r,g,b,a"),
+            (0.85, 0.85, 0.85, 1.0))
+        self.assertEqual(env.chat(), [])
+
+
 if __name__ == "__main__":
     unittest.main()
