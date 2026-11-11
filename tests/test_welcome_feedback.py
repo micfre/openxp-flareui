@@ -220,8 +220,151 @@ class FeedbackWindow(unittest.TestCase):
             ("Fonts\\FRIZQT__.TTF", 11))
 
 
+class GatingAndRobustness(unittest.TestCase):
+    # Every OpenXP refresh/rebuild path that restyles these windows; the
+    # skin must be back on top by the time each call returns. The two Show()
+    # calls are the lazy-creation path: the window appears with OpenXP's
+    # look, the engine re-applies after the hook.
+    REFRESH_CALLS = [
+        "HARNESS.openxp:RenderFrame()",
+        "HARNESS.openxp:ReloadTheme()",
+        "HARNESS.openxp.card.Refresh(nil, true)",
+        "HARNESS.openxp.card.SkinPanels()",
+        "HARNESS.openxp.card.ApplyFonts()",
+        "HARNESS.openxp.welcome.Show('update')",
+        "HARNESS.openxp.feedback.Show()",
+    ]
+
+    FLAREUI_EDGE = "Interface\\AddOns\\OXP-FUI\\Media\\Borders\\FlareUI-Frames.tga"
+
+    def test_skin_reapplied_after_every_openxp_refresh(self):
+        for call in self.REFRESH_CALLS:
+            with self.subTest(call=call):
+                env = Env()
+                env.boot()
+                # Create both windows first so refreshes have something to
+                # restyle (the fake's refresh calls reset the OpenXP look).
+                env.run("HARNESS.openxp.welcome.Show('welcome')")
+                env.run("HARNESS.openxp.feedback.Show()")
+                env.run(call)
+                for frame in ("OpenXPWelcomeFrame", "OpenXPFeedbackFrame"):
+                    self.assertEqual(env.run(f"return {frame}.backdrop.edgeFile"),
+                                     self.FLAREUI_EDGE,
+                                     f"skin lost on {frame} after {call}")
+                self.assertEqual(env.run(
+                    "local r,g,b,a = HARNESS.welcome.title:GetTextColor(); return r,g,b,a"),
+                    (1.0, 0.82, 0.0, 1.0), f"title lost after {call}")
+                self.assertEqual(env.run(
+                    "local r,g,b,a = HARNESS.feedback.panels[1].head:GetTextColor(); return r,g,b,a"),
+                    (0.80, 0.60, 0.34, 1.0), f"palette lost after {call}")
+
+    def test_lazy_windows_are_skipped_quietly_at_login_then_skinned_on_show(self):
+        env = Env()
+        env.boot()
+        # Neither window exists yet at login: quiet, no chat, but the skip
+        # is visible in the debug report.
+        self.assertIsNone(env.run("return _G.OpenXPWelcomeFrame"))
+        self.assertIsNone(env.run("return _G.OpenXPFeedbackFrame"))
+        self.assertEqual(env.chat(), [])
+        env.slash("/oxpfui debug")
+        report = "\n".join(env.chat())
+        self.assertIn("missing frame OpenXPWelcomeFrame", report)
+        self.assertIn("missing frame OpenXPFeedbackFrame", report)
+        env.run("HARNESS.chat = {}")  # drain: print() appends to this table
+        # First Show creates and OpenXP-styles the window; the hook brings
+        # the skin straight back on top.
+        env.run("HARNESS.openxp.welcome.Show('welcome')")
+        self.assertEqual(env.run("return OpenXPWelcomeFrame.backdrop.edgeFile"),
+                         self.FLAREUI_EDGE)
+        self.assertEqual(env.chat(), [])
+
+    def test_welcome_switch_off_leaves_only_welcome_untouched(self):
+        env = Env(db={"windows": {"welcome": False}})
+        env.boot()
+        env.run("HARNESS.openxp.welcome.Show('welcome')")
+        env.run("HARNESS.openxp.feedback.Show()")
+        # Welcome keeps OpenXP's own look, children included.
+        self.assertEqual(env.run("return OpenXPWelcomeFrame.backdrop.edgeFile"),
+                         "Interface\\Buttons\\WHITE8X8")
+        self.assertEqual(env.run(
+            "local r,g,b,a = HARNESS.welcome.title:GetTextColor(); return r,g,b,a"),
+            (1.0, 1.0, 1.0, 1.0))
+        self.assertIsNone(env.run("return HARNESS.welcome.title:GetFont()"))
+        # The feedback window is still skinned.
+        self.assertEqual(env.run("return OpenXPFeedbackFrame.backdrop.edgeFile"),
+                         self.FLAREUI_EDGE)
+
+    def test_feedback_switch_off_leaves_only_feedback_untouched(self):
+        env = Env(db={"windows": {"feedback": False}})
+        env.boot()
+        env.run("HARNESS.openxp.welcome.Show('welcome')")
+        env.run("HARNESS.openxp.feedback.Show()")
+        self.assertEqual(env.run("return OpenXPFeedbackFrame.backdrop.edgeFile"),
+                         "Interface\\Buttons\\WHITE8X8")
+        self.assertEqual(env.run(
+            "local r,g,b,a = HARNESS.feedback.title:GetTextColor(); return r,g,b,a"),
+            (1.0, 1.0, 1.0, 1.0))
+        self.assertEqual(env.run("return OpenXPWelcomeFrame.backdrop.edgeFile"),
+                         self.FLAREUI_EDGE)
+
+    def test_master_off_leaves_both_windows_in_openxp_look(self):
+        env = Env(db={"enabled": False})
+        env.boot()
+        env.run("HARNESS.openxp.welcome.Show('welcome')")
+        env.run("HARNESS.openxp.feedback.Show()")
+        env.run("HARNESS.openxp:RenderFrame()")
+        for frame in ("OpenXPWelcomeFrame", "OpenXPFeedbackFrame"):
+            self.assertEqual(env.run(f"return {frame}.backdrop.edgeFile"),
+                             "Interface\\Buttons\\WHITE8X8")
+        # OpenXP's own colours survive on the children too.
+        self.assertEqual(env.run(
+            "local r,g,b,a = HARNESS.welcome.start:GetBackdropColor(); return r,g,b,a"),
+            (28 / 255, 70 / 255, 104 / 255, 1.0))
+        self.assertEqual(env.run(
+            "local r,g,b,a = HARNESS.feedback.panels[2].panel:GetBackdropBorderColor(); return r,g,b,a"),
+            (60 / 255, 66 / 255, 78 / 255, 1.0))
+        self.assertEqual(env.chat(), [])
+
+    def test_no_layout_calls_are_ever_made(self):
+        env = Env()
+        env.boot()
+        env.run("HARNESS.openxp.welcome.Show('welcome')")
+        env.run("HARNESS.openxp.feedback.Show()")
+        env.run("HARNESS.openxp:RenderFrame()")
+        targets = ["OpenXPWelcomeFrame", "OpenXPFeedbackFrame",
+                   "HARNESS.welcome.badge", "HARNESS.welcome.panel",
+                   "HARNESS.welcome.start", "HARNESS.welcome.swatch",
+                   "HARNESS.feedback.panels[1].panel",
+                   "HARNESS.feedback.panels[1].box"]
+        for target in targets:
+            for method in ("SetPoint", "SetSize", "SetWidth", "SetHeight",
+                           "SetScale", "ClearAllPoints", "SetAllPoints"):
+                self.assertEqual(env.calls_made_on(target, method), 0,
+                                 f"{target}:{method} was called")
+        env.slash("/oxpfui debug")
+        self.assertIn("Blocked layout attempts: 0", "\n".join(env.chat()))
+
+    def test_border_and_opacity_settings_reach_both_windows(self):
+        env = Env(db={"borderStyle": "Thin", "opacity": 0.3})
+        env.boot()
+        env.run("HARNESS.openxp.welcome.Show('welcome')")
+        env.run("HARNESS.openxp.feedback.Show()")
+        for frame in ("OpenXPWelcomeFrame", "OpenXPFeedbackFrame"):
+            self.assertEqual(env.run(f"return {frame}.backdrop.edgeFile"),
+                             "Interface\\AddOns\\OXP-FUI\\Media\\Borders\\FlareUI-Thin.tga")
+            self.assertEqual(env.run(f"return {frame}.backdrop.edgeSize"), 8)
+            self.assertEqual(env.run(
+                f"local r,g,b,a = {frame}:GetBackdropColor(); return a"), 0.3)
+        # Insets sit a step firmer than the window fill.
+        self.assertEqual(env.run(
+            "local r,g,b,a = HARNESS.welcome.panel:GetBackdropColor(); return a"), 0.55)
+
+
+
+
+
+
+
+
 if __name__ == "__main__":
     unittest.main()
-
-
-

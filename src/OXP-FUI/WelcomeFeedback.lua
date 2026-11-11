@@ -54,11 +54,16 @@ end
 
 -- OpenXP's WelcomeFrame.lua / Feedback.lua COLORS tables. Its blue accent
 -- becomes FlareUI bronze (spec: "OpenXP's blue accent becomes FlareUI
--- amber/bronze"), its text greys the FlareUI greys.
+-- amber/bronze"), its text greys the FlareUI greys. The FlareUI entries map
+-- to themselves so re-applying over an already-skinned string is stable
+-- (some OpenXP refresh paths restyle nothing before we run again).
 local PALETTE_MAP = {
   { from = { 90 / 255, 184 / 255, 1 }, to = "ZONE" },    -- accent blue -> bronze
   { from = { 0.86, 0.86, 0.9 }, to = "OBJECTIVE" },      -- body text grey
   { from = { 0.6, 0.62, 0.7 }, to = "DIM" },             -- muted grey
+  { from = theme.C.ZONE, to = "ZONE" },
+  { from = theme.C.OBJECTIVE, to = "OBJECTIVE" },
+  { from = theme.C.DIM, to = "DIM" },
 }
 local EPS = 1 / 64
 
