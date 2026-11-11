@@ -184,7 +184,9 @@ end
 
 function HARNESS.ApplyOpenXPLook()
   applyOpenXPLook(N("OpenXPCard"), N("OpenXPCard").header.zone)
-  applyOpenXPLook(N("RXPG_ARROW"), N("RXPG_ARROW").text)
+  -- Like OpenXP's own code (addon.arrowFrame), not a _G lookup: a test may
+  -- nil the global to simulate a rename without breaking the fake itself.
+  applyOpenXPLook(af, af.text)
   -- The dial/text repaint card.ArrowUpdate does (once the card styled it).
   ArrowPaintOpenXP()
   applyOpenXPLook(N("RXPTargetFrame"), N("RXPTargetFrame_title").text)
@@ -238,9 +240,9 @@ addon.card = {
       fs:SetShadowOffset(0, 0)
     end
     refont(N("OpenXPCard").header.zone, 12)
-    refont(N("RXPG_ARROW").text, 12)
-    refont(N("RXPG_ARROW").oxpDist, 17)
-    refont(N("RXPG_ARROW").oxpLabel, 12)
+    refont(af.text, 12)
+    refont(af.oxpDist, 17)
+    refont(af.oxpLabel, 12)
     refont(N("RXPTargetFrame_title").text, 12)
   end,
 }

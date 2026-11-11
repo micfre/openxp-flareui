@@ -273,5 +273,128 @@ class ArrowSwitches(unittest.TestCase):
         self.assertEqual(env.chat(), [])
 
 
+class ArrowRobustness(unittest.TestCase):
+    """Story 31: a renamed/removed frame or field is skipped quietly — no
+    error, no chat spam, the rest of the skin still applies."""
+
+    def test_missing_arrow_frame_is_skipped_quietly(self):
+        env = Env(load_addon=False)
+        env.run("_G.RXPG_ARROW = nil")  # a future OpenXP rename
+        env.load_addon()
+        env.boot()
+        env.run("HARNESS.openxp:RenderFrame()")
+        self.assertEqual(env.chat(), [])
+        env.slash("/oxpfui debug")
+        self.assertIn("missing frame RXPG_ARROW", "\n".join(env.chat()))
+
+    def test_missing_arrow_fields_skip_those_pieces_only(self):
+        env = Env(load_addon=False)
+        env.run("RXPG_ARROW.dialRing = nil")
+        env.run("RXPG_ARROW.oxpDist = nil")
+        env.run("RXPG_ARROW.oxpLabel = nil")
+        env.run("RXPG_ARROW.arrived = nil")
+        env.load_addon()
+        env.boot()
+        env.run("HARNESS.ArrowTick()")  # arrived detection has no check to read
+        self.assertEqual(env.chat(), [])
+        # What still exists is still skinned.
+        self.assertEqual(env.run(
+            "local r,g,b,a = RXPG_ARROW.dialBg:GetVertexColor(); return r,g,b,a"),
+            WARM_DARK + (0.85,))
+        self.assertEqual(env.run("return RXPG_ARROW.texture:GetDesaturated()"), True)
+        env.slash("/oxpfui debug")
+        report = "\n".join(env.chat())
+        self.assertIn("Errors: none", report)
+
+
+class ArrowInvariants(unittest.TestCase):
+    """Stories 10/29: OpenXP's arrow position, scale, size and drag
+    behaviour are never touched, and no new textures are created."""
+
+    def setUp(self):
+        self.env = Env()
+        # Baseline after fake load, before the addon boots: layout calls the
+        # fake itself makes during OpenXP's setup don't count against OXP-FUI.
+        env = self.env
+        self.children = env.run("return #RXPG_ARROW.__children")
+        self.points = env.run("return RXPG_ARROW:GetNumPoints()")
+        self.size = env.run("local w,h = RXPG_ARROW:GetSize(); return w,h")
+        self.scale = env.run("return RXPG_ARROW:GetScale()")
+        self.layout_calls = {
+            (name, m): env.calls_made_on(name, m)
+            for name in ("RXPG_ARROW",) + tuple(
+                f"RXPG_ARROW.{f}" for f in ARROW_CHILDREN)
+            for m in LAYOUT_METHODS
+        }
+        self.drag = {
+            handler: env.run(f"return RXPG_ARROW:GetScript({handler!r})")
+            for handler in ("OnMouseDown", "OnMouseUp")
+        }
+        # lupa wraps the same Lua function in a new Python object per call,
+        # so identity is asserted inside Lua against stashed references.
+        env.run("_G.__arrowDrag = {}")
+        for handler in ("OnMouseDown", "OnMouseUp"):
+            env.run(f"_G.__arrowDrag[{handler!r}] = RXPG_ARROW:GetScript({handler!r})")
+
+    def _exercise_everything(self, env):
+        env.boot()
+        env.run("RXPG_ARROW.distance = 100")
+        env.run("HARNESS.ArrowTick()")
+        env.run("RXPG_ARROW.distance = 3")
+        env.run("HARNESS.ArrowTick()")
+        env.run("HARNESS.openxp:RenderFrame()")
+        env.run("HARNESS.openxp.SetupArrow()")
+        env.run("HARNESS.openxp:ReloadTheme()")
+        env.run("HARNESS.openxp.card.ApplyFonts()")
+        env.run("RXPG_ARROW.UpdateVisuals()")
+
+    def test_no_layout_calls_on_arrow_or_any_of_its_regions(self):
+        env = self.env
+        self._exercise_everything(env)
+        for (name, method), before in self.layout_calls.items():
+            self.assertEqual(env.calls_made_on(name, method), before,
+                             f"{name}:{method} was called by the skin")
+        # Stronger still: not even an attempt the engine's guard had to
+        # block (guarded frames swallow layout calls silently).
+        env.slash("/oxpfui debug")
+        self.assertIn("Blocked layout attempts: 0", "\n".join(env.chat()))
+
+    def test_position_scale_and_size_never_change(self):
+        env = self.env
+        self._exercise_everything(env)
+        self.assertEqual(env.run("return RXPG_ARROW:GetNumPoints()"), self.points)
+        self.assertEqual(env.run("local w,h = RXPG_ARROW:GetSize(); return w,h"),
+                         self.size)
+        self.assertEqual(env.run("return RXPG_ARROW:GetScale()"), self.scale)
+
+    def test_no_new_textures_or_font_strings_are_created(self):
+        env = self.env
+        self._exercise_everything(env)
+        self.assertEqual(env.run("return #RXPG_ARROW.__children"), self.children)
+
+    def test_drag_behaviour_scripts_untouched(self):
+        env = self.env
+        self._exercise_everything(env)
+        for handler, before in self.drag.items():
+            self.assertIsNotNone(before, f"fake lost its own {handler} handler")
+            self.assertTrue(env.run(
+                f"return RXPG_ARROW:GetScript({handler!r}) == _G.__arrowDrag[{handler!r}]"),
+                f"{handler} drag handler was replaced")
+
+    def test_openxp_arrow_logic_keeps_running_through_the_chain(self):
+        env = self.env
+        env.boot()
+        env.run("RXPG_ARROW.distance = 50")
+        env.run("HARNESS.ArrowTick()")
+        env.run("RXPG_ARROW.distance = 5")
+        env.run("HARNESS.ArrowTick()")
+        # DrawArrow and the state logic (show/hide + text) still run after
+        # the skin chained its re-assert onto the OnUpdate handler.
+        self.assertGreaterEqual(env.openxp_calls("DrawArrow"), 2)
+        self.assertGreaterEqual(env.openxp_calls("ArrowUpdate"), 2)
+        self.assertEqual(env.run("return RXPG_ARROW.oxpDist:GetText()"), "Here")
+        self.assertEqual(env.run("return RXPG_ARROW.texture:IsShown()"), False)
+
+
 if __name__ == "__main__":
     unittest.main()
