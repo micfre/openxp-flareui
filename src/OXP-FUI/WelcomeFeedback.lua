@@ -97,6 +97,34 @@ end
 -- Window bodies
 -- ---------------------------------------------------------------------------
 
+-- Style one child of a skinned window by what OpenXP built: flat buttons
+-- become bronze box buttons, link edit boxes and sub-panels bronze hairline
+-- insets with their texts re-typographed. CheckButtons and Blizzard template
+-- chrome (UIPanelCloseButton, the scroll frame and its scrollbar) are left
+-- as they are. `inner` recurses one level, for the panels inside the
+-- feedback window that hold the link boxes and the action button.
+local function StyleChild(child, inner)
+  local objectType = type(child.GetObjectType) == "function" and child:GetObjectType() or nil
+  if objectType == "Button" then
+    theme.ApplyBoxButton(child)
+  elseif objectType == "EditBox" then
+    theme.ApplyInsetBackdrop(child)
+  elseif objectType == "Frame" and child.GetBackdrop and child:GetBackdrop() then
+    theme.ApplyInsetBackdrop(child)
+  else
+    return
+  end
+  for _, fs in ipairs(FontStringsOf(child)) do
+    theme.ApplyFontString(fs, "body")
+    MapTextColor(fs)
+  end
+  if inner and objectType == "Frame" then
+    for _, grand in ipairs(CallList(child, "GetChildren")) do
+      StyleChild(grand, false)
+    end
+  end
+end
+
 -- FlareUI typography and palette over every text a window shows. The window
 -- titles are OpenXP's white headline strings; they become FlareUI gold
 -- headers.
@@ -121,6 +149,9 @@ local function ApplyWelcome(ctx)
   if not f then return end
   theme.ApplyBackdrop(f)
   ApplyWindowTypography(f, "OpenXP")
+  for _, child in ipairs(CallList(f, "GetChildren")) do
+    StyleChild(child, false)
+  end
   -- The scrolling body lives on the content frame inside the scroll frame;
   -- OpenXP stores it as a field. (The scroll frame itself is Blizzard
   -- template chrome and is left alone.)
@@ -128,6 +159,9 @@ local function ApplyWelcome(ctx)
     theme.ApplyFontString(f.body, "body")
     MapTextColor(f.body)
   end
+  -- Let OpenXP re-paint the route colour swatch fill (it shows the player's
+  -- route-line colour; only the hairline is ours).
+  if type(f.ShowColor) == "function" then f.ShowColor() end
 end
 
 local function ApplyFeedback(ctx)
@@ -135,6 +169,9 @@ local function ApplyFeedback(ctx)
   if not f then return end
   theme.ApplyBackdrop(f)
   ApplyWindowTypography(f, "Feedback")
+  for _, child in ipairs(CallList(f, "GetChildren")) do
+    StyleChild(child, true)
+  end
 end
 
 OXPFUI.RegisterSkin{

@@ -85,6 +85,58 @@ class WelcomeWindow(unittest.TestCase):
             "local r,g,b,a = HARNESS.welcome.glow:GetVertexColor(); return r,g,b,a"),
             (0.80, 0.60, 0.34, 0.35))
 
+    def test_welcome_flat_buttons_become_bronze_box_buttons(self):
+        env = Env()
+        env.boot()
+        env.run("HARNESS.openxp.welcome.Show('welcome')")
+        for btn in ("start", "later"):
+            with self.subTest(button=btn):
+                self.assertEqual(env.run(
+                    f"local r,g,b,a = HARNESS.welcome.{btn}:GetBackdropColor(); return r,g,b,a"),
+                    (0.0, 0.0, 0.0, 0.85))  # FlareUI box-button fill
+                self.assertEqual(env.run(
+                    f"local r,g,b,a = HARNESS.welcome.{btn}:GetBackdropBorderColor(); return r,g,b,a"),
+                    (0.50, 0.38, 0.21, 1.0))  # bronze at rest
+        # Hover lights the bronze (FlareUI's box-button hover), replacing
+        # OpenXP's white hover border.
+        env.run("HARNESS.welcome.start:GetScript('OnEnter')(HARNESS.welcome.start)")
+        self.assertEqual(env.run(
+            "local r,g,b,a = HARNESS.welcome.start:GetBackdropBorderColor(); return r,g,b,a"),
+            (0.65, 0.49, 0.27, 1.0))
+        env.run("HARNESS.welcome.start:GetScript('OnLeave')(HARNESS.welcome.start)")
+        self.assertEqual(env.run(
+            "local r,g,b,a = HARNESS.welcome.start:GetBackdropBorderColor(); return r,g,b,a"),
+            (0.50, 0.38, 0.21, 1.0))
+        # Button labels get FlareUI typography too.
+        self.assertEqual(env.run(
+            "local p,s = HARNESS.welcome.start.label:GetFont(); return p,s"),
+            ("Fonts\\FRIZQT__.TTF", 11))
+
+    def test_welcome_sub_panels_get_bronze_hairline_insets(self):
+        env = Env()
+        env.boot()
+        env.run("HARNESS.openxp.welcome.Show('welcome')")
+        for panel in ("badge", "panel"):
+            with self.subTest(panel=panel):
+                self.assertEqual(env.run(
+                    f"return HARNESS.welcome.{panel}.backdrop.edgeFile"),
+                    "Interface\\Buttons\\WHITE8X8")  # hairline, not border art
+                self.assertEqual(env.run(
+                    f"local r,g,b,a = HARNESS.welcome.{panel}:GetBackdropBorderColor(); return r,g,b,a"),
+                    (0.50, 0.38, 0.21, 1.0))
+        # The badge version chip reads bronze in the FlareUI palette.
+        self.assertEqual(env.run(
+            "local r,g,b,a = HARNESS.welcome.badgeText:GetTextColor(); return r,g,b,a"),
+            (0.80, 0.60, 0.34, 1.0))
+        # The route swatch keeps showing the route colour (OpenXP's own
+        # ShowColor re-runs), over a bronze hairline.
+        self.assertEqual(env.run(
+            "local r,g,b,a = HARNESS.welcome.swatch:GetBackdropColor(); return r,g,b,a"),
+            (0.72, 0.42, 1.0, 1.0))
+        self.assertEqual(env.run(
+            "local r,g,b,a = HARNESS.welcome.swatch:GetBackdropBorderColor(); return r,g,b,a"),
+            (0.50, 0.38, 0.21, 1.0))
+
 
 if __name__ == "__main__":
     unittest.main()

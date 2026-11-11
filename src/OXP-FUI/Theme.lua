@@ -90,4 +90,51 @@ function theme.ApplyTextColor(fs, colorName)
   fs:SetTextColor(c[1], c[2], c[3], 1)
 end
 
+-- FlareUI's bronze box-button paint (CreateBoxButton in the tracker) applied
+-- to an existing BackdropTemplate button: hairline bronze border over a
+-- near-black fill, bronze-lit while hovered. OpenXP's own white hover swap
+-- runs first (HookScript chains), so the bronze wins. Hooking once per
+-- button keeps re-applies from stacking handlers.
+function theme.ApplyBoxButton(btn)
+  btn:SetBackdrop({
+    bgFile = "Interface\\Buttons\\WHITE8X8",
+    edgeFile = "Interface\\Buttons\\WHITE8X8",
+    tile = false, tileSize = 0, edgeSize = 1,
+    insets = { left = 1, right = 1, top = 1, bottom = 1 },
+  })
+  btn:SetBackdropColor(0, 0, 0, 0.85)
+  local rest, lit = theme.C.BOX, theme.C.BOX_LIT
+  btn:SetBackdropBorderColor(rest[1], rest[2], rest[3], 1)
+  if not btn.__oxpfuiBoxHover then
+    btn.__oxpfuiBoxHover = true
+    btn:HookScript("OnEnter", function(self)
+      self:SetBackdropBorderColor(lit[1], lit[2], lit[3], 1)
+    end)
+    btn:HookScript("OnLeave", function(self)
+      self:SetBackdropBorderColor(rest[1], rest[2], rest[3], 1)
+    end)
+  end
+  return btn
+end
+
+-- Sub-panel inset: the warm dark fill at a slightly firmer opacity than the
+-- window (OpenXP's own sub-panels are a step lighter than their windows),
+-- with a bronze hairline instead of border art — the window already wears
+-- the border art.
+function theme.ApplyInsetBackdrop(frame)
+  local db = OXPFUI.db or {}
+  local opacity = db.opacity
+  if type(opacity) ~= "number" then opacity = 0.6 end
+  frame:SetBackdrop({
+    bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background-Dark",
+    edgeFile = "Interface\\Buttons\\WHITE8X8",
+    tile = false, tileSize = 0, edgeSize = 1,
+    insets = { left = 1, right = 1, top = 1, bottom = 1 },
+  })
+  frame:SetBackdropColor(1, 1, 1, math.min(1, opacity + 0.25))
+  local c = theme.C.BOX
+  frame:SetBackdropBorderColor(c[1], c[2], c[3], 1)
+  return frame
+end
+
 OXPFUI.theme = theme
