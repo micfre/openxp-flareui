@@ -161,5 +161,54 @@ class ArrowTypography(unittest.TestCase):
             OBJECTIVE + (1.0,))
 
 
+class ArrowRefreshReapply(unittest.TestCase):
+    """Story 23 / override policy: OXP-FUI re-applies after OpenXP's
+    refresh/rebuild calls, including the arrow-specific ones."""
+
+    REFRESH_CALLS = [
+        "HARNESS.openxp:RenderFrame()",
+        "HARNESS.openxp:ReloadTheme()",
+        "HARNESS.openxp.SetupArrow()",
+        "RXPG_ARROW.UpdateVisuals()",
+        "HARNESS.openxp.card.ApplyFonts()",
+    ]
+
+    def test_every_arrow_refresh_call_keeps_the_flareui_look(self):
+        for call in self.REFRESH_CALLS:
+            with self.subTest(call=call):
+                env = Env()
+                env.boot()
+                env.run("RXPG_ARROW.distance = 100")
+                env.run(call)
+                # The original ran (hook preserved it)...
+                self.assertGreaterEqual(env.run("return #RXPG_ARROW.__calls"), 1)
+                # ...and the FlareUI look survived it: pointer desaturated +
+                # amber, ring amber, OpenXP's outline font overridden.
+                self.assertEqual(env.run(
+                    "return RXPG_ARROW.texture:GetDesaturated()"), True)
+                self.assertEqual(env.run(
+                    "local r,g,b,a = RXPG_ARROW.texture:GetVertexColor(); return r,g,b,a"),
+                    AMBER + (1.0,))
+                self.assertEqual(env.run(
+                    "local r,g,b,a = RXPG_ARROW.dialRing:GetVertexColor(); return r,g,b,a"),
+                    AMBER + (0.6,))
+                self.assertEqual(env.run(
+                    "local p,s,f = RXPG_ARROW.oxpDist:GetFont(); return p,s,f"),
+                    ("Fonts\\FRIZQT__.TTF", 13, ""))
+                self.assertEqual(env.run(
+                    "local p,s,f = RXPG_ARROW.oxpLabel:GetFont(); return p,s,f"),
+                    ("Fonts\\FRIZQT__.TTF", 11, ""))
+
+    def test_openxp_per_frame_repaint_after_refresh_still_loses(self):
+        env = Env()
+        env.boot()
+        env.run("HARNESS.openxp:ReloadTheme()")
+        env.run("RXPG_ARROW.distance = 40")
+        env.run("HARNESS.ArrowTick()")
+        self.assertEqual(env.run(
+            "local r,g,b,a = RXPG_ARROW.dialRing:GetVertexColor(); return r,g,b,a"),
+            AMBER + (0.6,))
+
+
 if __name__ == "__main__":
     unittest.main()
