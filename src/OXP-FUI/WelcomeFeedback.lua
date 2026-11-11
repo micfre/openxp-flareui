@@ -111,6 +111,10 @@ end
 local function StyleChild(child, inner)
   local objectType = type(child.GetObjectType) == "function" and child:GetObjectType() or nil
   if objectType == "Button" then
+    -- Only buttons OpenXP itself gave a backdrop (its flat buttons, the
+    -- colour swatch); template chrome like UIPanelCloseButton has none and
+    -- keeps its own look.
+    if not (child.GetBackdrop and child:GetBackdrop()) then return end
     theme.ApplyBoxButton(child)
   elseif objectType == "EditBox" then
     -- An edit box's text is not a font-string region: the box itself takes

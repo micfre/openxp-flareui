@@ -344,6 +344,24 @@ class GatingAndRobustness(unittest.TestCase):
         env.slash("/oxpfui debug")
         self.assertIn("Blocked layout attempts: 0", "\n".join(env.chat()))
 
+    def test_blizzard_template_chrome_is_left_alone(self):
+        env = Env()
+        env.boot()
+        env.run("HARNESS.openxp.welcome.Show('welcome')")
+        env.run("HARNESS.openxp.feedback.Show()")
+        # The close buttons (UIPanelCloseButton) and the route checkbutton
+        # (UICheckButtonTemplate) are Blizzard template chrome: no backdrop
+        # is forced on them, nothing is restyled.
+        for target in ("HARNESS.welcome.close", "HARNESS.feedback.close",
+                       "HARNESS.welcome.route"):
+            with self.subTest(target=target):
+                self.assertIsNone(env.run(f"return {target}.backdrop"))
+                self.assertEqual(env.run(
+                    f"local n=0; for _,c in ipairs({target}.__calls) do "
+                    "if c[1]=='SetBackdrop' or c[1]=='SetBackdropColor' "
+                    "or c[1]=='SetBackdropBorderColor' then n=n+1 end end return n"),
+                    0)
+
     def test_border_and_opacity_settings_reach_both_windows(self):
         env = Env(db={"borderStyle": "Thin", "opacity": 0.3})
         env.boot()

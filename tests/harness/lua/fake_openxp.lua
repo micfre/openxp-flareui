@@ -87,12 +87,18 @@ end
 
 local function MakeFlatButton(parent, text, primary)
   local b = CreateFrame("Button", nil, parent, "BackdropTemplate")
-  FrameBackdrop(b, primary and { 28 / 255, 70 / 255, 104 / 255, 1 } or OXP_COLORS.panel,
-                primary and OXP_COLORS.accent or OXP_COLORS.border)
+  local edge = primary and OXP_COLORS.accent or OXP_COLORS.border
+  FrameBackdrop(b, primary and { 28 / 255, 70 / 255, 104 / 255, 1 } or OXP_COLORS.panel, edge)
   local label = b:CreateFontString(nil, "OVERLAY", "GameFontNormal")
   label:SetText(text)
   label:SetTextColor(1, 1, 1, 1)
   b.label = label
+  -- OpenXP's own hover swap (WelcomeFrame.lua MakeButton): border flashes
+  -- white, then back to the window's own edge colour.
+  b:SetScript("OnEnter", function(self) self:SetBackdropBorderColor(1, 1, 1, 0.8) end)
+  b:SetScript("OnLeave", function(self)
+    self:SetBackdropBorderColor(edge[1], edge[2], edge[3], edge[4] or 1)
+  end)
   return b
 end
 
