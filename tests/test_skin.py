@@ -1128,6 +1128,111 @@ class ItemUpgradesWindows(unittest.TestCase):
             (1.0, 1.0, 1.0, 0.6))
         self.assertEqual(env.chat(), [])
 
+    def assert_flareui_look(self, env):
+        self.assertEqual(env.run("return AuctionFrameTab2.backdrop.edgeFile"), FLAREUI_EDGE)
+        self.assertEqual(env.run(
+            "local p,s,f = AuctionFrameTab2Text:GetFont(); return p,s,f"),
+            (FRIZQ, 12, ""))
+        self.assertEqual(env.run("return RXPItemUpgradesComparison.backdrop.edgeFile"),
+                         FLAREUI_EDGE)
+
+    def assert_openxp_look(self, env):
+        self.assertEqual(env.run("return AuctionFrameTab2.backdrop.edgeFile"), OPENXP_EDGE)
+        self.assertEqual(env.run(
+            "local p,s,f = AuctionFrameTab2Text:GetFont(); return p,s,f"),
+            ("Fonts\\FRIZQT__.TTF", 10, ""))
+        self.assertEqual(env.run("return RXPItemUpgradesComparison.backdrop.edgeFile"),
+                         OPENXP_EDGE)
+
+    # -- Blizzard frames stay untouched (stories 18-20) -----------------------
+
+    def test_blizzard_tabs_and_the_auction_frame_are_never_touched(self):
+        env = Env()
+        blizzard = ("AuctionFrame", "AuctionFrameTab1", "AuctionFrameTab1Text")
+        before = {f: env.calls_made_on(f) for f in blizzard}
+        env.boot()
+        env.run("HARNESS.openxp:RenderFrame()")
+        env.run("HARNESS.openxp:ReloadTheme()")
+        for f in blizzard:
+            self.assertEqual(env.calls_made_on(f), before[f], f"{f} was touched")
+        # Blizzard's tab keeps its own label look and no OXP-FUI backdrop.
+        self.assertIsNone(env.run("return AuctionFrameTab1.backdrop"))
+        self.assertEqual(env.run(
+            "local r,g,b,a = AuctionFrameTab1Text:GetTextColor(); return r,g,b,a"),
+            (1.0, 1.0, 1.0, 1.0))
+
+    # -- re-apply after OpenXP refreshes (stories 22-23) ----------------------
+
+    def test_skin_wins_after_every_openxp_refresh(self):
+        for call in ("HARNESS.openxp:RenderFrame()", "HARNESS.openxp:ReloadTheme()",
+                     "HARNESS.openxp.card.SkinPanels()"):
+            with self.subTest(call=call):
+                env = Env()
+                env.boot()
+                env.run(call)
+                self.assert_flareui_look(env)
+                self.assertEqual(env.chat(), [])
+
+    # -- switches (stories 24-25) ----------------------------------------------
+
+    def test_per_window_switch_off_leaves_the_upgrades_surfaces_untouched(self):
+        env = Env(db={"windows": {"upgrades": False}})
+        env.boot()
+        env.run("HARNESS.openxp:RenderFrame()")
+        self.assert_openxp_look(env)
+        env.slash("/oxpfui debug")
+        self.assertIn("window 'upgrades' is switched off", "\n".join(env.chat()))
+
+    def test_master_switch_off_leaves_the_upgrades_surfaces_untouched(self):
+        env = Env(db={"enabled": False})
+        env.boot()
+        env.run("HARNESS.openxp:RenderFrame()")
+        self.assert_openxp_look(env)
+        self.assertEqual(env.chat(), [])
+
+    # -- robustness (stories 31-32) ---------------------------------------------
+
+    def test_missing_frames_are_skipped_quietly_without_errors(self):
+        # The Auction House was never opened and OpenXP renamed the tooltip.
+        env = Env()
+        env.run("""
+          _G.AuctionFrameTab1 = nil
+          _G.AuctionFrameTab2 = nil
+          _G.RXPItemUpgradesComparison = nil
+        """)
+        env.boot()
+        env.run("HARNESS.openxp:RenderFrame()")
+        self.assertEqual(env.chat(), [])
+        env.slash("/oxpfui debug")
+        report = "\n".join(env.chat())
+        self.assertIn("missing frame RXPItemUpgradesComparison", report)
+        self.assertIn("Errors: none", report)
+
+    def test_missing_tab_text_is_skipped_quietly(self):
+        env = Env()
+        env.run("_G.AuctionFrameTab2Text = nil")
+        env.boot()
+        self.assertEqual(env.chat(), [])
+        # The tab itself is still framed; only the label font is skipped.
+        self.assertEqual(env.run("return AuctionFrameTab2.backdrop.edgeFile"), FLAREUI_EDGE)
+        env.slash("/oxpfui debug")
+        self.assertIn("Errors: none", "\n".join(env.chat()))
+
+    # -- appearance only (story 29) -----------------------------------------------
+
+    def test_no_position_or_size_is_ever_changed(self):
+        env = Env()
+        layout = ("SetPoint", "SetSize", "SetWidth", "SetHeight", "SetScale",
+                  "SetAllPoints", "ClearAllPoints")
+        family = ("AuctionFrame", "AuctionFrameTab1", "AuctionFrameTab2",
+                  "RXPItemUpgradesComparison")
+        before = {(f, m): env.calls_made_on(f, m) for f in family for m in layout}
+        env.boot()
+        env.run("HARNESS.openxp:RenderFrame()")
+        for (f, m), count in before.items():
+            self.assertEqual(env.calls_made_on(f, m), count,
+                             f"{f}:{m} was called by the skin")
+
 
 if __name__ == "__main__":
     unittest.main()
