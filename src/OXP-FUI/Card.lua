@@ -159,7 +159,7 @@ local function skinHist(hist, openxp)
   end
 end
 
-local function skinBlocks(blocks, openxp)
+local function skinBlocks(blocks)
   for _, b in ipairs(blocks or {}) do
     text(b.title, "TITLE", "title")
     text(b.num, "DIM", "body")
@@ -289,7 +289,7 @@ local function Apply(ctx)
     ensureDivider(f, header)
   end
   if cardModule and cardModule.hist then skinHist(ctx.Guard(cardModule.hist), openxp) end
-  if cardModule then skinBlocks(cardModule.blocksForTest, openxp) end
+  if cardModule then skinBlocks(cardModule.blocksForTest) end
   if upNext then skinUpNext(ctx.Guard(upNext)) end
   if bar then skinBar(ctx.Guard(bar)) end
   if cardModule and cardModule.xpStrip then skinXPStrip(cardModule.xpStrip) end
