@@ -70,6 +70,42 @@ OXPFUI.RegisterSkin{
 
 
 -- ---------------------------------------------------------------------------
+-- Item upgrades
+-- ---------------------------------------------------------------------------
+
+OXPFUI.RegisterSkin{
+  name = "upgrades",
+  windows = { "upgrades" },
+  Apply = function(ctx)
+    -- The stat-diff comparison tooltip OpenXP builds for itself. Its text
+    -- lines are re-styled by the tooltip machinery on every fill, so only
+    -- the chrome is skinned.
+    local tip = ctx.Frame("RXPItemUpgradesComparison")
+    if tip then theme.ApplyBackdrop(tip) end
+
+    -- OpenXP's Auction House tab. Blizzard's tabs share the AuctionFrameTab
+    -- numbering, so the frames are told apart by OpenXP's own isRXP flag;
+    -- unflagged tabs are never touched.
+    for i = 1, 12 do
+      local name = "AuctionFrameTab" .. i
+      local raw = _G[name]
+      if raw == nil then break end
+      if raw.isRXP == true then
+        local tab = ctx.Frame(name)
+        if tab then
+          theme.ApplyBackdrop(tab)
+          local text = ctx.Frame(name .. "Text")
+          if text then
+            theme.ApplyFontString(text, "title")
+            theme.ApplyTextColor(text, "TITLE")
+          end
+        end
+      end
+    end
+  end,
+}
+
+-- ---------------------------------------------------------------------------
 -- Active-item frame
 -- ---------------------------------------------------------------------------
 

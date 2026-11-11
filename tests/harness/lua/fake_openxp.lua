@@ -178,6 +178,35 @@ talentRow.levelHeader.text = talentRow.levelHeader:CreateFontString(nil, "OVERLA
 talentRow.levelHeader.text:SetFont("Fonts\\ARIALN.TTF", 10, "OUTLINE")
 talentRow.levelHeader.text:SetText("12,14")
 
+-- Item upgrades (phase 2, ticket 8) -------------------------------------------
+-- Mirrors ItemUpgrades.lua 850-860/2195-2233: the stat-diff comparison
+-- tooltip OpenXP builds for itself (a GameTooltip with its own text lines),
+-- and OpenXP's Auction House tab, which continues Blizzard's
+-- AuctionFrameTab numbering and is marked isRXP — Blizzard's own tabs carry
+-- no flag and must never be touched by anyone.
+local auctionFrame = CreateFrame("Frame", "AuctionFrame", UIParent)
+auctionFrame.numTabs = 1
+local function auctionTab(index, label, isRXP)
+  local tab = CreateFrame("Button", "AuctionFrameTab" .. index, auctionFrame,
+    "AuctionTabTemplate")
+  tab.isRXP = isRXP
+  tab:SetID(index)
+  tab.Text = tab:CreateFontString("AuctionFrameTab" .. index .. "Text", "OVERLAY",
+    nil, "GameFontHighlightSmall")
+  tab.Text:SetText(label)
+  tab.Text:SetFont("Fonts\\FRIZQT__.TTF", 10, "")
+  tab.Text:SetTextColor(1, 1, 1, 1)
+  return tab
+end
+auctionTab(1, "Bids", false)   -- Blizzard's own tab
+auctionTab(2, "OpenXP", true)  -- OpenXP's item-upgrades tab
+local comparisonTip = CreateFrame("GameTooltip", "RXPItemUpgradesComparison", nil,
+  "GameTooltipTemplate")
+comparisonTip.TextLeft1 = comparisonTip:CreateFontString(
+  "RXPItemUpgradesComparisonTextLeft1", nil, nil, "GameTooltipText")
+comparisonTip.TextRight1 = comparisonTip:CreateFontString(
+  "RXPItemUpgradesComparisonTextRight1", nil, nil, "GameTooltipText")
+
 -- EXCLUDED frames (must never be touched by OXP-FUI) ------------------------
 local rxpFrame = CreateFrame("Frame", "RXPFrame", UIParent, "BackdropTemplate")
 CreateFrame("Frame", "RXPFrame_bottomFrame", rxpFrame)
@@ -290,6 +319,21 @@ function HARNESS.ApplyOpenXPLook()
   end
   applyOpenXPLook(N("RXP_TalentsMenuFrame"))
   applyOpenXPLook(N("RXP_TalentsMenuFrameListFrame"))
+  -- Item upgrades: only OpenXP's own tab (isRXP) is reset — Blizzard's tabs
+  -- are never touched by anyone. The comparison tooltip gets the harness
+  -- stand-in charcoal backdrop.
+  for i = 1, 12 do
+    local tab = N("AuctionFrameTab" .. i)
+    if not tab then break end
+    if tab.isRXP then
+      applyOpenXPLook(tab)
+      if tab.Text then
+        tab.Text:SetFont("Fonts\\FRIZQT__.TTF", 10, "")
+        tab.Text:SetTextColor(1, 1, 1, 1)
+      end
+    end
+  end
+  applyOpenXPLook(N("RXPItemUpgradesComparison"))
 end
 
 HARNESS.ApplyOpenXPLook()
@@ -376,6 +420,7 @@ addon.talents = {
   talentsButton = talentsTab,
   menuFrame = talentsMenu,
 }
+addon.itemUpgrades = {}
 
 function addon.RenderFrame(_, themeUpdate, isLoading)
   bump("RenderFrame")

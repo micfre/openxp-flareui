@@ -1099,5 +1099,35 @@ class Talents(unittest.TestCase):
                              f"{f}:{m} was called by the skin")
 
 
+class ItemUpgradesWindows(unittest.TestCase):
+    """Ticket #8 (story 16): the shipped item-upgrades skin — OpenXP's own
+    Auction House tab (told apart from Blizzard's tabs by the isRXP flag)
+    and the stat-diff comparison tooltip OpenXP builds for itself."""
+
+    def test_comparison_tooltip_and_own_ah_tab_get_flareui_look_after_login(self):
+        env = Env()
+        env.boot()
+        # OpenXP's tab (isRXP): FlareUI panel + gold tab label.
+        self.assertEqual(env.run("return AuctionFrameTab2.backdrop.edgeFile"), FLAREUI_EDGE)
+        self.assertEqual(env.run(
+            "local r,g,b,a = AuctionFrameTab2:GetBackdropBorderColor(); return r,g,b,a"),
+            (0.65, 0.49, 0.27, 1.0))
+        self.assertEqual(env.run(
+            "local p,s,f = AuctionFrameTab2Text:GetFont(); return p,s,f"),
+            (FRIZQ, 12, ""))
+        self.assertEqual(env.run(
+            "local r,g,b,a = AuctionFrameTab2Text:GetTextColor(); return r,g,b,a"),
+            (1.0, 0.82, 0.0, 1.0))
+        self.assertEqual(env.run(
+            "local x,y = AuctionFrameTab2Text:GetShadowOffset(); return x,y"), (1, -1))
+        # The comparison tooltip: FlareUI panel.
+        self.assertEqual(env.run("return RXPItemUpgradesComparison.backdrop.edgeFile"),
+                         FLAREUI_EDGE)
+        self.assertEqual(env.run(
+            "local r,g,b,a = RXPItemUpgradesComparison:GetBackdropColor(); return r,g,b,a"),
+            (1.0, 1.0, 1.0, 0.6))
+        self.assertEqual(env.chat(), [])
+
+
 if __name__ == "__main__":
     unittest.main()
