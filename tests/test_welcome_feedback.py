@@ -138,5 +138,90 @@ class WelcomeWindow(unittest.TestCase):
             (0.50, 0.38, 0.21, 1.0))
 
 
+class FeedbackWindow(unittest.TestCase):
+    def test_feedback_window_wears_flareui_backdrop_on_show(self):
+        env = Env()
+        env.boot()
+        env.run("HARNESS.openxp.feedback.Show()")
+        self.assertEqual(env.run("return OpenXPFeedbackFrame.backdrop.edgeFile"),
+                         "Interface\\AddOns\\OXP-FUI\\Media\\Borders\\FlareUI-Frames.tga")
+        self.assertEqual(env.run("return OpenXPFeedbackFrame.backdrop.edgeSize"), 16)
+        self.assertEqual(env.run(
+            "local r,g,b,a = OpenXPFeedbackFrame:GetBackdropBorderColor(); return r,g,b,a"),
+            (0.65, 0.49, 0.27, 1.0))
+        self.assertEqual(env.run(
+            "local r,g,b,a = OpenXPFeedbackFrame:GetBackdropColor(); return r,g,b,a"),
+            (1.0, 1.0, 1.0, 0.6))
+
+    def test_feedback_typography_and_palette(self):
+        env = Env()
+        env.boot()
+        env.run("HARNESS.openxp.feedback.Show()")
+        fb = "HARNESS.feedback"
+        # Title: gold Friz Quadrata header with the 1px shadow.
+        self.assertEqual(env.run(
+            f"local p,s,f = {fb}.title:GetFont(); return p,s,f"),
+            ("Fonts\\FRIZQT__.TTF", 13, ""))
+        self.assertEqual(env.run(
+            f"local r,g,b,a = {fb}.title:GetTextColor(); return r,g,b,a"),
+            (1.0, 0.82, 0.0, 1.0))
+        # The hint (OpenXP muted) goes FlareUI dim; the footer keeps its font
+        # object's colour in OpenXP and lands on FlareUI body grey.
+        self.assertEqual(env.run(
+            f"local r,g,b,a = {fb}.hint:GetTextColor(); return r,g,b,a"),
+            (0.55, 0.55, 0.55, 1.0))
+        self.assertEqual(env.run(
+            f"local r,g,b,a = {fb}.footer:GetTextColor(); return r,g,b,a"),
+            (0.85, 0.85, 0.85, 1.0))
+        # Every section panel: title (OpenXP accent blue) -> bronze, body
+        # grey -> FlareUI grey, all in Friz Quadrata 11 with the shadow.
+        for i in (1, 2, 3, 4):
+            with self.subTest(panel=i):
+                self.assertEqual(env.run(
+                    f"local p,s = {fb}.panels[{i}].head:GetFont(); return p,s"),
+                    ("Fonts\\FRIZQT__.TTF", 11))
+                self.assertEqual(env.run(
+                    f"local r,g,b,a = {fb}.panels[{i}].head:GetTextColor(); return r,g,b,a"),
+                    (0.80, 0.60, 0.34, 1.0))
+                self.assertEqual(env.run(
+                    f"local r,g,b,a = {fb}.panels[{i}].body:GetTextColor(); return r,g,b,a"),
+                    (0.85, 0.85, 0.85, 1.0))
+                self.assertEqual(env.run(
+                    f"local x,y = {fb}.panels[{i}].body:GetShadowOffset(); return x,y"),
+                    (1, -1))
+
+    def test_feedback_panels_boxes_and_button_get_flareui_chrome(self):
+        env = Env()
+        env.boot()
+        env.run("HARNESS.openxp.feedback.Show()")
+        fb = "HARNESS.feedback"
+        for i in (1, 2, 3, 4):
+            with self.subTest(panel=i):
+                # Section panel: bronze hairline inset, not border art.
+                self.assertEqual(env.run(
+                    f"local r,g,b,a = {fb}.panels[{i}].panel:GetBackdropBorderColor(); return r,g,b,a"),
+                    (0.50, 0.38, 0.21, 1.0))
+                # Link box: inset too, link text in FlareUI body grey.
+                self.assertEqual(env.run(
+                    f"local r,g,b,a = {fb}.panels[{i}].box:GetBackdropBorderColor(); return r,g,b,a"),
+                    (0.50, 0.38, 0.21, 1.0))
+                self.assertEqual(env.run(
+                    f"local r,g,b,a = {fb}.panels[{i}].box:GetTextColor(); return r,g,b,a"),
+                    (0.85, 0.85, 0.85, 1.0))
+        # The one action button is a bronze box button with a styled label.
+        self.assertEqual(env.run(
+            f"local r,g,b,a = {fb}.panels[1].btn:GetBackdropColor(); return r,g,b,a"),
+            (0.0, 0.0, 0.0, 0.85))
+        self.assertEqual(env.run(
+            f"local r,g,b,a = {fb}.panels[1].btn:GetBackdropBorderColor(); return r,g,b,a"),
+            (0.50, 0.38, 0.21, 1.0))
+        self.assertEqual(env.run(
+            f"local p,s = {fb}.panels[1].btn.label:GetFont(); return p,s"),
+            ("Fonts\\FRIZQT__.TTF", 11))
+
+
 if __name__ == "__main__":
     unittest.main()
+
+
+

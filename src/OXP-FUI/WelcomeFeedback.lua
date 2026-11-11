@@ -108,7 +108,11 @@ local function StyleChild(child, inner)
   if objectType == "Button" then
     theme.ApplyBoxButton(child)
   elseif objectType == "EditBox" then
+    -- An edit box's text is not a font-string region: the box itself takes
+    -- the font/colour calls.
     theme.ApplyInsetBackdrop(child)
+    theme.ApplyFontString(child, "body")
+    MapTextColor(child)
   elseif objectType == "Frame" and child.GetBackdrop and child:GetBackdrop() then
     theme.ApplyInsetBackdrop(child)
   else
