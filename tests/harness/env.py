@@ -16,7 +16,9 @@ ADDON_DIR = REPO_ROOT / "src" / "OXP-FUI"
 LUA_DIR = pathlib.Path(__file__).resolve().parent / "lua"
 
 # TOC order; kept in sync with src/OXP-FUI/OXP-FUI.toc (build test enforces).
-ADDON_FILES = ["Core.lua", "Locale.lua", "Theme.lua", "Engine.lua", "SkinTargets.lua", "SkinTracker.lua", "SettingsPanel.lua"]
+ADDON_FILES = ["Core.lua", "Locale.lua", "Theme.lua", "Engine.lua",
+               "ArrowSkin.lua", "SkinTargets.lua", "SkinTracker.lua",
+               "WelcomeFeedback.lua", "SettingsPanel.lua"]
 
 
 def _lua_literal(value) -> str:

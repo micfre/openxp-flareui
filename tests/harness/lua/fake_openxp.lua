@@ -31,9 +31,95 @@ card.header = cardHeader
 card.header.zone = cardHeader:CreateFontString(nil, "OVERLAY")
 
 -- Waypoint arrow (phase 1) --------------------------------------------------
+-- Mirrors map.lua plus the card's arrow code (OpenXPCard.lua): StyleArrow
+-- creates the dial textures and the dist/label font strings once; the
+-- OnUpdate handler (card's ArrowUpdate) then repaints the ring tint and
+-- the distance text colour EVERY FRAME, following the arrived state. A
+-- skin under test must therefore win not only over the refresh calls but
+-- also over that per-frame repaint.
 local af = CreateFrame("Frame", "RXPG_ARROW", UIParent)
 af.texture = af:CreateTexture(nil, "ARTWORK")
 af.text = af:CreateFontString(nil, "OVERLAY")
+
+local OXP_TEX = "Interface\\AddOns\\OpenXP\\Textures\\Card\\"
+-- The slice of OpenXPCard.lua's local C table the arrow repaint uses.
+local OXP_C = {
+  blue = { 90 / 255, 184 / 255, 1 },
+  green = { 61 / 255, 187 / 255, 122 / 255 },
+}
+local function OXPTint(tex, color, alpha)
+  tex:SetVertexColor(color[1], color[2], color[3], alpha or color[4] or 1)
+end
+
+-- Arrow state DrawArrow would maintain (map.lua); tests drive it directly.
+af.distance = 100
+af.element = { title = "Kill: Forest Wolf Pack" }
+
+-- map.lua drag handlers: OpenXP behaviour OXP-FUI must leave untouched.
+af:SetMovable(true)
+af:EnableMouse(1)
+af:SetScript("OnMouseDown", function(self)
+  local a = HARNESS.openxp
+  if a and not a.settings.profile.lockFrames and self:GetAlpha() ~= 0 then
+    self:StartMoving()
+  end
+end)
+af:SetScript("OnMouseUp", function(self)
+  self:StopMovingOrSizing()
+end)
+
+-- card.StyleArrow (OpenXPCard.lua:2196): dial + text, created once.
+local function StyleArrow()
+  if af.openxpStyled then return end
+  af.openxpStyled = true
+  af.dialBg = af:CreateTexture(nil, "BACKGROUND")
+  af.dialBg:SetTexture(OXP_TEX .. "dialdisc")
+  af.dialBg:SetVertexColor(16 / 255, 17 / 255, 21 / 255, 0.85)
+  af.dialRing = af:CreateTexture(nil, "BORDER")
+  af.dialRing:SetTexture(OXP_TEX .. "dialring")
+  af.arrived = af:CreateTexture(nil, "OVERLAY")
+  af.arrived:SetTexture(OXP_TEX .. "check")
+  OXPTint(af.arrived, OXP_C.green)
+  af.arrived:Hide()
+  af.text:SetAlpha(0)
+  af.oxpDist = af:CreateFontString(nil, "OVERLAY")
+  af.oxpDist:SetFont("Fonts\\ARIALN.TTF", 17, "OUTLINE")
+  af.oxpLabel = af:CreateFontString(nil, "OVERLAY")
+  af.oxpLabel:SetFont("Fonts\\ARIALN.TTF", 12, "OUTLINE")
+  af.oxpLabel:SetTextColor(0.72, 0.74, 0.8, 1)
+end
+
+-- The colour/text half of card.ArrowUpdate (OpenXPCard.lua:2261-2288):
+-- OpenXP's own per-frame repaint, following the arrived state. Reused by
+-- HARNESS.ApplyOpenXPLook so refresh calls reset the dial to OpenXP's look.
+local function ArrowPaintOpenXP()
+  if not af.oxpDist then return end
+  local dist = af.distance or 0
+  local element = af.oxpVia or af.element
+  local here = element and dist <= 8
+  if here then
+    af.texture:Hide()
+    af.arrived:Show()
+    OXPTint(af.dialRing, OXP_C.green)
+    af.oxpDist:SetText("Here")
+    af.oxpDist:SetTextColor(OXP_C.green[1], OXP_C.green[2], OXP_C.green[3], 1)
+  else
+    af.texture:Show()
+    af.arrived:Hide()
+    OXPTint(af.dialRing, OXP_C.blue, 0.6)
+    af.oxpDist:SetText(string.format("%d yd", dist))
+    af.oxpDist:SetTextColor(0.96, 0.97, 0.98, 1)
+  end
+  af.oxpLabel:SetText(element and element.title or "")
+end
+
+-- The OnUpdate handler OpenXP installs on the arrow frame (card.TimedArrow).
+local function ArrowUpdate(self)
+  bump("ArrowUpdate")
+  local a = HARNESS.openxp
+  if a and a.DrawArrow then a.DrawArrow(self) end
+  ArrowPaintOpenXP()
+end
 
 -- Quest Targets (phase 1) ---------------------------------------------------
 -- Mirrors Targeting.lua: the frame, its title strip ("QUEST TARGETS" + a
@@ -107,7 +193,7 @@ targetButton(tf.friendlyTargetButtons, "RXPTargetFrame_FriendlyButton1",
 -- can prove targeting still works after OXP-FUI restyles the rows.
 eb1:SetScript("OnClick", function() bump("RXPTargetFrame_EnemyButton1 click") end)
 
--- Phase 2 windows -----------------------------------------------------------
+-- Other phase 2 panels (tracker/active-item tickets) --------------------------
 local itemFrame = CreateFrame("Frame", "RXPItemFrame", UIParent, "BackdropTemplate")
 local itemTitle = CreateFrame("Frame", "RXPItemFrame_title", itemFrame)
 itemTitle.text = itemTitle:CreateFontString(nil, "OVERLAY")
@@ -199,8 +285,231 @@ reports.CharacterFrame = report
 -- OpenXP aliases the (unnamed) AceGUI frame under this global for Escape.
 _G["RESTEDXP_TRACKER_SUMMARY_WINDOW"] = report.frame
 
-CreateFrame("Frame", "OpenXPWelcomeFrame", UIParent, "BackdropTemplate")
-CreateFrame("Frame", "OpenXPFeedbackFrame", UIParent, "BackdropTemplate")
+-- Welcome / what's-new + feedback windows (phase 2) ---------------------------
+-- Mirrors WelcomeFrame.lua:799-989 and Feedback.lua:185-268: created lazily on
+-- first Show(), children mostly unnamed, exposed on the addon table as
+-- welcome.Show / feedback.Show. Showing a window re-asserts the OpenXP look
+-- (creation-time styling, and what a rebuild would redo), so the engine
+-- under test must win over it.
+-- OpenXP's flat charcoal backdrop (WHITE8X8 hairline), used by the helpers
+-- below and by the "OpenXP look" restyle further down.
+local OXP_BACKDROP = {
+  bgFile = "Interface\\Buttons\\WHITE8X8",
+  edgeFile = "Interface\\Buttons\\WHITE8X8",
+  tile = true, tileSize = 1, edgeSize = 1,
+  insets = { left = 1, right = 1, top = 1, bottom = 1 },
+}
+
+local OXP_COLORS = {
+  bg = { 16 / 255, 17 / 255, 21 / 255, 0.96 },
+  panel = { 22 / 255, 24 / 255, 29 / 255, 0.9 },
+  accent = { 90 / 255, 184 / 255, 1 },
+  border = { 60 / 255, 66 / 255, 78 / 255 },
+  text = { 0.86, 0.86, 0.9 },
+  muted = { 0.6, 0.62, 0.7 },
+}
+
+local function FrameBackdrop(fr, bg, edge)
+  fr:SetBackdrop(OXP_BACKDROP)
+  fr:SetBackdropColor(bg[1], bg[2], bg[3], bg[4] or 1)
+  fr:SetBackdropBorderColor(edge[1], edge[2], edge[3], edge[4] or 1)
+end
+
+local function MakeFlatButton(parent, text, primary)
+  local b = CreateFrame("Button", nil, parent, "BackdropTemplate")
+  local edge = primary and OXP_COLORS.accent or OXP_COLORS.border
+  FrameBackdrop(b, primary and { 28 / 255, 70 / 255, 104 / 255, 1 } or OXP_COLORS.panel, edge)
+  local label = b:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+  label:SetText(text)
+  label:SetTextColor(1, 1, 1, 1)
+  b.label = label
+  -- OpenXP's own hover swap (WelcomeFrame.lua MakeButton): border flashes
+  -- white, then back to the window's own edge colour.
+  b:SetScript("OnEnter", function(self) self:SetBackdropBorderColor(1, 1, 1, 0.8) end)
+  b:SetScript("OnLeave", function(self)
+    self:SetBackdropBorderColor(edge[1], edge[2], edge[3], edge[4] or 1)
+  end)
+  return b
+end
+
+-- Forward declarations: referenced by ApplyOpenXPLook above its definition.
+local ResetWelcome, ResetFeedback
+
+local function CreateWelcomeFrame()
+  local f = CreateFrame("Frame", "OpenXPWelcomeFrame", UIParent, "BackdropTemplate")
+  f:EnableMouse(true)
+  f:RegisterForDrag("LeftButton")
+  FrameBackdrop(f, OXP_COLORS.bg, OXP_COLORS.accent)
+
+  -- Accent-blue textures (the header divider and the logo glow).
+  local divider = f:CreateTexture(nil, "ARTWORK")
+  divider:SetColorTexture(90 / 255, 184 / 255, 1, 0.6)
+  local glow = f:CreateTexture(nil, "ARTWORK")
+  glow:SetTexture("Interface/Cooldown/star4")
+  glow:SetVertexColor(90 / 255, 184 / 255, 1, 0.35)
+
+  -- Title block (title/subtitle are unnamed locals in the real addon).
+  local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormalHuge")
+  title:SetText("OpenXP")
+  title:SetTextColor(1, 1, 1, 1)
+  title:SetShadowOffset(2, -2)
+  local subtitle = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+  subtitle:SetText("Free leveling guides for WoW Forever")
+  subtitle:SetTextColor(0.86, 0.86, 0.9, 1)
+
+  local badge = CreateFrame("Frame", nil, f, "BackdropTemplate")
+  FrameBackdrop(badge, { 16 / 255, 40 / 255, 70 / 255, 1 }, OXP_COLORS.accent)
+  local badgeText = badge:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+  badgeText:SetText("v" .. HARNESS.openxpVersion)
+  badgeText:SetTextColor(90 / 255, 184 / 255, 1, 1)
+
+  local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
+
+  -- Scrolling body: panel -> scroll (Blizzard template) -> content -> body.
+  local panel = CreateFrame("Frame", nil, f, "BackdropTemplate")
+  FrameBackdrop(panel, OXP_COLORS.panel, OXP_COLORS.border)
+  local scroll = CreateFrame("ScrollFrame", nil, panel, "UIPanelScrollFrameTemplate")
+  local content = CreateFrame("Frame", nil, scroll)
+  scroll:SetScrollChild(content)
+  local body = content:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+  body:SetText("Welcome, adventurer!")
+  body:SetTextColor(0.86, 0.86, 0.9, 1)
+  f.body, f.content = body, content
+
+  -- Choices row: route checkbox + label, colour swatch + label, Questie hint.
+  local route = CreateFrame("CheckButton", nil, f, "UICheckButtonTemplate")
+  route:SetChecked(true)
+  local routeText = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+  routeText:SetText("Show route lines on the world map and minimap")
+  routeText:SetTextColor(0.86, 0.86, 0.9, 1)
+  local swatch = CreateFrame("Button", nil, f, "BackdropTemplate")
+  FrameBackdrop(swatch, { 0.72, 0.42, 1, 1 }, OXP_COLORS.border)
+  local swatchText = f:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+  swatchText:SetText("Colour")
+  swatchText:SetTextColor(0.6, 0.62, 0.7, 1)
+  local function ShowColor()
+    swatch:SetBackdropColor(0.72, 0.42, 1, 1) -- profile.openxpRouteColor default
+  end
+  local questie = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  questie:SetText("Recommended: install the free Questie addon.")
+  -- (the real addon keeps the font object's colour here: no SetTextColor)
+
+  local start = MakeFlatButton(f, "Start leveling", true)
+  local later = MakeFlatButton(f, "Close", false)
+  later.label:SetTextColor(0.86, 0.86, 0.9, 1)
+
+  f.route, f.ShowColor = route, ShowColor
+  f:Hide()
+
+  HARNESS.welcome = {
+    frame = f, title = title, subtitle = subtitle, badge = badge,
+    badgeText = badgeText, close = close, panel = panel, scroll = scroll,
+    content = content, body = body, route = route, routeText = routeText,
+    swatch = swatch, swatchText = swatchText, questie = questie,
+    divider = divider, glow = glow, start = start, later = later,
+  }
+  return f
+end
+
+function ResetWelcome()
+  local w = HARNESS.welcome
+  if not w then return end
+  FrameBackdrop(w.frame, OXP_COLORS.bg, OXP_COLORS.accent)
+  FrameBackdrop(w.badge, { 16 / 255, 40 / 255, 70 / 255, 1 }, OXP_COLORS.accent)
+  FrameBackdrop(w.panel, OXP_COLORS.panel, OXP_COLORS.border)
+  FrameBackdrop(w.swatch, { 0.72, 0.42, 1, 1 }, OXP_COLORS.border)
+  FrameBackdrop(w.start, { 28 / 255, 70 / 255, 104 / 255, 1 }, OXP_COLORS.accent)
+  FrameBackdrop(w.later, OXP_COLORS.panel, OXP_COLORS.border)
+  w.divider:SetColorTexture(90 / 255, 184 / 255, 1, 0.6)
+  w.glow:SetVertexColor(90 / 255, 184 / 255, 1, 0.35)
+  w.title:SetTextColor(1, 1, 1, 1)
+  w.subtitle:SetTextColor(0.86, 0.86, 0.9, 1)
+  w.badgeText:SetTextColor(90 / 255, 184 / 255, 1, 1)
+  w.body:SetTextColor(0.86, 0.86, 0.9, 1)
+  w.routeText:SetTextColor(0.86, 0.86, 0.9, 1)
+  w.swatchText:SetTextColor(0.6, 0.62, 0.7, 1)
+  w.start.label:SetTextColor(1, 1, 1, 1)
+  w.later.label:SetTextColor(0.86, 0.86, 0.9, 1)
+end
+
+local FEEDBACK_SECTIONS = {
+  { key = "bug", title = "Report a bug", text = "Something broken or wrong in a guide?", button = "Full bug details" },
+  { key = "suggestion", title = "Suggest something", text = "An idea for a feature, a better route or a quest the guide should add." },
+  { key = "comment", title = "Leave a comment", text = "Say hi, ask a question or tell other players how OpenXP worked for you." },
+  { key = "rate", title = "Rate OpenXP", text = "Enjoying OpenXP? A rating on CurseForge helps other players find it." },
+}
+
+local function MakeLinkBox(parent)
+  local box = CreateFrame("EditBox", nil, parent, "BackdropTemplate")
+  box:SetAutoFocus(false)
+  box:SetFontObject("GameFontHighlightSmall")
+  box:SetTextInsets(6, 6, 0, 0)
+  FrameBackdrop(box, { 10 / 255, 11 / 255, 14 / 255, 1 }, OXP_COLORS.border)
+  box.url = "https://github.com/mjared123/OpenXP"
+  box:SetText(box.url)
+  box:SetCursorPosition(0)
+  return box
+end
+
+local function CreateFeedbackFrame()
+  local f = CreateFrame("Frame", "OpenXPFeedbackFrame", UIParent, "BackdropTemplate")
+  f:EnableMouse(true)
+  f:RegisterForDrag("LeftButton")
+  FrameBackdrop(f, OXP_COLORS.bg, OXP_COLORS.accent)
+
+  local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+  title:SetText("Feedback")
+  title:SetTextColor(1, 1, 1, 1)
+  local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
+  local hint = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  hint:SetText("WoW can't open web pages, so click a link and copy it.")
+  hint:SetTextColor(0.6, 0.62, 0.7, 1)
+
+  f.boxes = {}
+  local panels = {}
+  for _, s in ipairs(FEEDBACK_SECTIONS) do
+    local panel = CreateFrame("Frame", nil, f, "BackdropTemplate")
+    FrameBackdrop(panel, OXP_COLORS.panel, OXP_COLORS.border)
+    local head = panel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    head:SetText(s.title)
+    head:SetTextColor(90 / 255, 184 / 255, 1, 1)
+    local bodyText = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    bodyText:SetText(s.text)
+    bodyText:SetTextColor(0.86, 0.86, 0.9, 1)
+    f.boxes[s.key] = MakeLinkBox(panel)
+    local btn
+    if s.button then
+      btn = MakeFlatButton(panel, s.button, true)
+      btn.label:SetTextColor(1, 1, 1, 1)
+    end
+    panels[#panels + 1] = { panel = panel, head = head, body = bodyText, box = f.boxes[s.key], btn = btn }
+  end
+
+  local footer = f:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+  footer:SetText("Thanks for helping make OpenXP better!")
+
+  f:Hide()
+  HARNESS.feedback = { frame = f, title = title, close = close, hint = hint, panels = panels, footer = footer }
+  return f
+end
+
+function ResetFeedback()
+  local fb = HARNESS.feedback
+  if not fb then return end
+  FrameBackdrop(fb.frame, OXP_COLORS.bg, OXP_COLORS.accent)
+  fb.title:SetTextColor(1, 1, 1, 1)
+  fb.hint:SetTextColor(0.6, 0.62, 0.7, 1)
+  for _, p in ipairs(fb.panels) do
+    FrameBackdrop(p.panel, OXP_COLORS.panel, OXP_COLORS.border)
+    FrameBackdrop(p.box, { 10 / 255, 11 / 255, 14 / 255, 1 }, OXP_COLORS.border)
+    p.head:SetTextColor(90 / 255, 184 / 255, 1, 1)
+    p.body:SetTextColor(0.86, 0.86, 0.9, 1)
+    if p.btn then
+      FrameBackdrop(p.btn, { 28 / 255, 70 / 255, 104 / 255, 1 }, OXP_COLORS.accent)
+      p.btn.label:SetTextColor(1, 1, 1, 1)
+    end
+  end
+end
 
 -- EXCLUDED frames (must never be touched by OXP-FUI) ------------------------
 local rxpFrame = CreateFrame("Frame", "RXPFrame", UIParent, "BackdropTemplate")
@@ -219,13 +528,6 @@ CreateFrame("Frame", "BugSackFrame", UIParent)
 -- -------------------------------------------------------------------------
 -- "OpenXP look" restyle (what the engine must always win over)
 -- -------------------------------------------------------------------------
-
-local OXP_BACKDROP = {
-  bgFile = "Interface\\Buttons\\WHITE8X8",
-  edgeFile = "Interface\\Buttons\\WHITE8X8",
-  tile = true, tileSize = 1, edgeSize = 1,
-  insets = { left = 1, right = 1, top = 1, bottom = 1 },
-}
 
 local function applyOpenXPLook(frame, fontString)
   if frame then
@@ -372,15 +674,18 @@ end
 function HARNESS.ApplyOpenXPLook()
   local card = N("OpenXPCard")
   applyOpenXPLook(card, card and card.header and card.header.zone or nil)
-  local af = N("RXPG_ARROW")
-  applyOpenXPLook(af, af and af.text or nil)
+  -- Like OpenXP's own code (addon.arrowFrame), not a _G lookup: a test may
+  -- nil the global to simulate a rename without breaking the fake itself.
+  applyOpenXPLook(af, af.text)
+  -- The dial/text repaint card.ArrowUpdate does (once the card styled it).
+  ArrowPaintOpenXP()
   HARNESS.ApplyTargetsOpenXPLook()
   local itemFrame = N("RXPItemFrame")
   applyOpenXPLook(itemFrame, itemFrame and itemFrame.title and itemFrame.title.text or nil)
   HARNESS.ApplySplitsOpenXPLook()
   HARNESS.ApplyReportOpenXPLook()
-  applyOpenXPLook(N("OpenXPWelcomeFrame"))
-  applyOpenXPLook(N("OpenXPFeedbackFrame"))
+  ResetWelcome()
+  ResetFeedback()
 end
 
 HARNESS.ApplyOpenXPLook()
@@ -419,14 +724,17 @@ addon.card = {
   SkinPanel = function(_, f) bump("card.SkinPanel"); if f then applyOpenXPLook(f.__raw or f) end end,
   ApplyFonts = function()
     bump("card.ApplyFonts")
-    local function refont(fs)
-      fs:SetFont("Fonts\\ARIALN.TTF", 12, "OUTLINE")
+    local function refont(fs, size)
+      if not fs then return end
+      fs:SetFont("Fonts\\ARIALN.TTF", size or 12, "OUTLINE")
       fs:SetShadowOffset(0, 0)
     end
-    refont(N("OpenXPCard").header.zone)
-    refont(N("RXPG_ARROW").text)
+    refont(N("OpenXPCard").header.zone, 12)
+    refont(af.text, 12)
+    refont(af.oxpDist, 17)
+    refont(af.oxpLabel, 12)
     local t = N("RXPTargetFrame_title")
-    if t and t.text then refont(t.text) end
+    if t and t.text then refont(t.text, 12) end
   end,
 }
 
@@ -457,6 +765,26 @@ addon.activeItemFrame.UpdateVisuals = function() bump("activeItemFrame.UpdateVis
   applyOpenXPLook(N("RXPItemFrame"))
 end
 
+-- The two windows this harness creates lazily (see the phase 2 section
+-- above). Real signatures: welcome.Show(mode, lastSeen) / feedback.Show().
+addon.welcome = {
+  changelog = {},
+  Show = function()
+    bump("welcome.Show")
+    if not HARNESS.welcome then CreateWelcomeFrame() end
+    ResetWelcome()
+    HARNESS.welcome.frame:Show()
+  end,
+}
+addon.feedback = {
+  Show = function()
+    bump("feedback.Show")
+    if not HARNESS.feedback then CreateFeedbackFrame() end
+    ResetFeedback()
+    HARNESS.feedback.frame:Show()
+  end,
+}
+
 function addon.RenderFrame(_, themeUpdate, isLoading)
   bump("RenderFrame")
   HARNESS.ApplyOpenXPLook()
@@ -469,13 +797,22 @@ end
 
 function addon.SetupArrow()
   bump("SetupArrow")
-  af.texture:SetTexture("Interface\\AddOns\\OpenXP\\Textures\\Card\\pointer")
+  af.text:SetFont("Fonts\\ARIALN.TTF", 9, "OUTLINE")
+  af:UpdateVisuals()
   applyOpenXPLook(nil, af.text)
+  -- The card wraps addon.SetupArrow and runs card.SetupArrow, which styles
+  -- the arrow once and re-points OnUpdate at card.TimedArrow (ArrowUpdate).
+  StyleArrow()
+  af:SetScript("OnUpdate", ArrowUpdate)
 end
 
 af.UpdateVisuals = function()
   bump("arrowFrame.UpdateVisuals")
   af.texture:SetTexture("Interface\\AddOns\\OpenXP\\Textures\\Card\\pointer")
+end
+
+addon.DrawArrow = function(self)
+  bump("DrawArrow")
 end
 
 -- LibStub AceAddon-3.0 shim serving the fake addon table.
@@ -489,3 +826,14 @@ HARNESS.libs["AceAddon-3.0"] = {
 HARNESS.openxp = addon
 _G.RXPGuides = {}
 HARNESS.addonMetadata["OpenXP"] = { Title = "OpenXP", Version = HARNESS.openxpVersion }
+
+-- addon:OnInitialize calls addon.SetupArrow() (RXPGuides.lua:1572) — the
+-- card's wrapper styles the dial and installs the per-frame update.
+addon.SetupArrow()
+
+-- Advance the arrow by one frame: run whatever OnUpdate script OpenXP (or a
+-- skin under test) currently has installed, exactly like the client would.
+function HARNESS.ArrowTick()
+  local script = af:GetScript("OnUpdate")
+  if script then script(af, 1 / 60) end
+end
