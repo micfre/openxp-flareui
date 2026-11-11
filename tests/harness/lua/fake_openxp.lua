@@ -126,6 +126,7 @@ splitsTitle.cog = cog
 local cogTex = cog:CreateTexture(nil, "ARTWORK")
 cogTex:SetTexture("Interface\\AddOns\\OpenXP\\Textures\\Minimal\\rxp_cog-32")
 cog:SetNormalTexture(cogTex)
+cog:SetScript("OnClick", function() bump("RXPLevelSplits_titleCogwheel click") end)
 splitsTitle.splitsMenuFrame =
   CreateFrame("Frame", "RXPG_SplitsMenuFrame", splitsTitle, "UIDropDownMenuTemplate")
 
@@ -142,6 +143,10 @@ end
 splits.history = aceLabel(splits)
 splits.current = aceLabel(splits)
 splits.total = aceLabel(splits)
+-- UpdateLevelSplits content (LevelingTracker.lua 1242-1316).
+splits.history:SetText("Level 40  4:41\nLevel 39  5:02")
+splits.current:SetText("Level 41  12:07 (est 18:40)")
+splits.total:SetText("Total  3:24:55")
 
 -- The leveling tracker proper (the report panel): AceGUI widgets attached
 -- to Blizzard frames and keyed by attachment name in addon.tracker.ui
@@ -319,7 +324,11 @@ end
 -- (LevelingTracker.lua 448-449, 523-633: RXPFrame edge backdrop, Arial
 -- Narrow 12 labels, untinted heading divider art).
 function HARNESS.ApplyReportOpenXPLook()
-  if type(reports) ~= "table" then return end
+  -- Read through the addon table once it exists, so tests that remove or
+  -- drift the report entries see the same thing OpenXP would.
+  local ui = (HARNESS.openxp and HARNESS.openxp.tracker
+    and HARNESS.openxp.tracker.ui) or reports
+  if type(ui) ~= "table" then return end
   local function labelOpenXPLook(w)
     -- Works for a Label widget (.label font string) or a bare font string.
     local fs = type(w) == "table" and (w.label or w) or nil
@@ -346,7 +355,7 @@ function HARNESS.ApplyReportOpenXPLook()
       for _, w in pairs(c.data) do labelOpenXPLook(w) end
     end
   end
-  for _, trackerUi in pairs(reports) do
+  for _, trackerUi in pairs(ui) do
     if type(trackerUi) == "table" then
       applyOpenXPLook(trackerUi.frame, trackerUi.titletext)
       local lb = trackerUi.levelButton
