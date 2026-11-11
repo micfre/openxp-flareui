@@ -145,6 +145,39 @@ splits.title = splitsTitle
 CreateFrame("Frame", "OpenXPWelcomeFrame", UIParent, "BackdropTemplate")
 CreateFrame("Frame", "OpenXPFeedbackFrame", UIParent, "BackdropTemplate")
 
+-- Talents (phase 2, ticket 8) ------------------------------------------------
+-- Mirrors Talents.lua 264-285/339: OpenXP's tab button on Blizzard's talent
+-- frame (square SpellBook-SkillLineTab box art behind the logo, hover
+-- highlight) and its right-click menu anchor (UIDropDownMenuTemplate). The
+-- visible list frame only appears once the menu has been opened.
+local playerTalentFrame = CreateFrame("Frame", "PlayerTalentFrame", UIParent)
+local talentsTab = CreateFrame("Button", "PlayerTalentFrameRXPTalents", playerTalentFrame)
+talentsTab:SetNormalTexture("Interface\\AddOns\\OpenXP\\Textures\\openxp_logo-64")
+talentsTab.bg = talentsTab:CreateTexture("PlayerTalentFrameRXPTalentsBG", "BACKGROUND")
+talentsTab.bg:SetTexture("Interface\\SpellBook\\SpellBook-SkillLineTab")
+talentsTab.bg:SetVertexColor(1, 1, 1)
+talentsTab.bg.ht = talentsTab:CreateTexture(nil, "HIGHLIGHT")
+talentsTab.bg.ht:SetTexture("Interface\\Buttons\\ButtonHilight-Square")
+local talentsMenu = CreateFrame("Frame", "RXP_TalentsMenuFrame", talentsTab,
+  "UIDropDownMenuTemplate")
+-- Simulates the player right-clicking the tab once: the dropdown's list
+-- frame is created lazily by the menu code, only then is it visible.
+function HARNESS.OpenTalentsMenu()
+  if not _G.RXP_TalentsMenuFrameListFrame then
+    CreateFrame("Button", "RXP_TalentsMenuFrameListFrame", nil,
+      "UIDropDownMenuListTemplate")
+  end
+  return _G.RXP_TalentsMenuFrameListFrame
+end
+-- Level tags OpenXP draws on Blizzard's talent rows (Talents.lua 846/1253):
+-- reachable only through Blizzard's own PlayerTalentFrameTalent* namespace,
+-- deliberately out of the skin's reach (see SkinWindows.lua).
+local talentRow = CreateFrame("Button", "PlayerTalentFrameTalent1", playerTalentFrame)
+talentRow.levelHeader = CreateFrame("Frame", "PlayerTalentFrameTalent1_levelText", talentRow)
+talentRow.levelHeader.text = talentRow.levelHeader:CreateFontString(nil, "OVERLAY")
+talentRow.levelHeader.text:SetFont("Fonts\\ARIALN.TTF", 10, "OUTLINE")
+talentRow.levelHeader.text:SetText("12,14")
+
 -- EXCLUDED frames (must never be touched by OXP-FUI) ------------------------
 local rxpFrame = CreateFrame("Frame", "RXPFrame", UIParent, "BackdropTemplate")
 CreateFrame("Frame", "RXPFrame_bottomFrame", rxpFrame)
@@ -239,7 +272,7 @@ function HARNESS.ApplyOpenXPLook()
   applyOpenXPLook(N("RXPItemFrame"))
   local itemTitle = N("RXPItemFrame_title")
   if itemTitle then
-    applyOpenXPLook(itemTitle, itemTitle.text)
+    applyOpenXPLook(itemTitle)
     if itemTitle.text then
       itemTitle.text:SetFont("Fonts\\ARIALN.TTF", 9, "")
       itemTitle.text:SetTextColor(0.62, 0.64, 0.70, 1)
@@ -248,6 +281,15 @@ function HARNESS.ApplyOpenXPLook()
   applyOpenXPLook(N("RXPLevelSplits"), N("RXPLevelSplits_title").text)
   applyOpenXPLook(N("OpenXPWelcomeFrame"))
   applyOpenXPLook(N("OpenXPFeedbackFrame"))
+  -- Talents: OpenXP never tints the tab's box art; the menu anchor carries
+  -- the harness stand-in charcoal backdrop (nil-safe for missing-frame
+  -- tests).
+  local tab = N("PlayerTalentFrameRXPTalents")
+  if tab and tab.bg and tab.bg.SetVertexColor then
+    tab.bg:SetVertexColor(1, 1, 1)
+  end
+  applyOpenXPLook(N("RXP_TalentsMenuFrame"))
+  applyOpenXPLook(N("RXP_TalentsMenuFrameListFrame"))
 end
 
 HARNESS.ApplyOpenXPLook()
@@ -317,9 +359,23 @@ addon.tracker = {
   CreateLevelSplits = function() bump("tracker.CreateLevelSplits") end,
 }
 addon.activeItemFrame = itemFrame
+-- UpdateV1IconFrameVisuals (ActiveItemFrame.lua 206-226): the frame and its
+-- title strip get the legacy backdrop, the title is re-fonted at 9pt.
 addon.activeItemFrame.UpdateVisuals = function() bump("activeItemFrame.UpdateVisuals")
   applyOpenXPLook(N("RXPItemFrame"))
+  local itemTitle = N("RXPItemFrame_title")
+  if itemTitle then
+    applyOpenXPLook(itemTitle)
+    if itemTitle.text then
+      itemTitle.text:SetFont("Fonts\\ARIALN.TTF", 9, "")
+      itemTitle.text:SetTextColor(0.62, 0.64, 0.70, 1)
+    end
+  end
 end
+addon.talents = {
+  talentsButton = talentsTab,
+  menuFrame = talentsMenu,
+}
 
 function addon.RenderFrame(_, themeUpdate, isLoading)
   bump("RenderFrame")

@@ -959,5 +959,30 @@ class ActiveItems(unittest.TestCase):
                              f"{f}:{m} was called by the skin")
 
 
+class Talents(unittest.TestCase):
+    """Ticket #8 (story 16): the shipped talents skin — OpenXP's tab button
+    on Blizzard's talent frame and its right-click menu."""
+
+    def test_tab_box_and_menu_get_flareui_look_after_login(self):
+        env = Env()
+        env.boot()
+        # The tab's square box art is tinted the FlareUI border bronze; the
+        # logo and the hover highlight keep OpenXP's own look.
+        self.assertEqual(env.run(
+            "local c = PlayerTalentFrameRXPTalentsBG.__vertexColor; return c[1],c[2],c[3]"),
+            (0.65, 0.49, 0.27))
+        self.assertEqual(env.run("return PlayerTalentFrameRXPTalents:GetNormalTexture()"),
+                         "Interface\\AddOns\\OpenXP\\Textures\\openxp_logo-64")
+        self.assertEqual(env.run(
+            "return PlayerTalentFrameRXPTalentsBG.ht.__texture"),
+                         "Interface\\Buttons\\ButtonHilight-Square")
+        # The menu dropdown gets the FlareUI panel.
+        self.assertEqual(env.run("return RXP_TalentsMenuFrame.backdrop.edgeFile"), FLAREUI_EDGE)
+        self.assertEqual(env.run(
+            "local r,g,b,a = RXP_TalentsMenuFrame:GetBackdropBorderColor(); return r,g,b,a"),
+            (0.65, 0.49, 0.27, 1.0))
+        self.assertEqual(env.chat(), [])
+
+
 if __name__ == "__main__":
     unittest.main()

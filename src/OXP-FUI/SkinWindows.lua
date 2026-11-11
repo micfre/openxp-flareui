@@ -40,6 +40,36 @@ local ADDON_NAME, OXPFUI = ...
 local theme = OXPFUI.theme
 
 -- ---------------------------------------------------------------------------
+-- Talents
+-- ---------------------------------------------------------------------------
+
+OXPFUI.RegisterSkin{
+  name = "talents",
+  windows = { "talents" },
+  Apply = function(ctx)
+    -- OpenXP's tab on Blizzard's talent frame: the square box art behind
+    -- the logo takes the bronze tint; logo and hover highlight stay as
+    -- OpenXP drew them. The level tags on Blizzard's talent rows are out of
+    -- reach on purpose (see the file header).
+    local tab = ctx.Frame("PlayerTalentFrameRXPTalents")
+    if tab then
+      if type(tab.bg) == "table" and tab.bg.SetVertexColor then
+        local b = theme.C.BORDER
+        tab.bg:SetVertexColor(b[1], b[2], b[3])
+      end
+    end
+
+    -- The right-click menu: the anchor now, the visible list frame once the
+    -- menu has been opened at least once (created lazily by the menu code).
+    local menu = ctx.Frame("RXP_TalentsMenuFrame")
+    if menu then theme.ApplyBackdrop(menu) end
+    local list = ctx.Frame("RXP_TalentsMenuFrameListFrame")
+    if list then theme.ApplyBackdrop(list) end
+  end,
+}
+
+
+-- ---------------------------------------------------------------------------
 -- Active-item frame
 -- ---------------------------------------------------------------------------
 
