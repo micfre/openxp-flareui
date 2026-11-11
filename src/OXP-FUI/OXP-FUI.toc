@@ -11,6 +11,7 @@ Locale.lua
 Theme.lua
 Engine.lua
 ArrowSkin.lua
+Card.lua
 SkinTargets.lua
 WelcomeFeedback.lua
 SettingsPanel.lua

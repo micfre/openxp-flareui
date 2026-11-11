@@ -19,7 +19,9 @@
 --
 -- Guarded frames refuse layout calls (SetPoint/SetSize/SetWidth/SetHeight/
 -- SetScale/...): OXP-FUI never moves or resizes an OpenXP frame, by
--- construction; the attempt is logged for /oxpfui debug.
+-- construction; the attempt is logged for /oxpfui debug. A guarded frame
+-- carries the real frame in .__raw, so skins (and Theme chrome recipes)
+-- parent and anchor their own textures to the frame the client knows.
 --
 -- After login the engine post-hooks OpenXP's refresh/rebuild calls
 -- (RenderFrame, ReloadTheme, SetupArrow, arrowFrame.UpdateVisuals,

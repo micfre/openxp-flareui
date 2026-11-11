@@ -58,6 +58,37 @@ local function baseMethods(kind)
     GetParent = function(self) return self.__parent end,
     IsProtected = function(self) return self.__protected == true end,
 
+    -- Real API: returns child *frames* only (never textures/fontstrings).
+    GetChildren = function(self)
+      local out = {}
+      for _, c in ipairs(self.__children) do
+        if c.__kind == "Frame" then out[#out + 1] = c end
+      end
+      return table.unpack(out)
+    end,
+    GetNumChildren = function(self)
+      local n = 0
+      for _, c in ipairs(self.__children) do
+        if c.__kind == "Frame" then n = n + 1 end
+      end
+      return n
+    end,
+    -- Real API: returns textures and fontstrings (never child frames).
+    GetRegions = function(self)
+      local out = {}
+      for _, c in ipairs(self.__children) do
+        if c.__kind ~= "Frame" then out[#out + 1] = c end
+      end
+      return table.unpack(out)
+    end,
+    GetNumRegions = function(self)
+      local n = 0
+      for _, c in ipairs(self.__children) do
+        if c.__kind ~= "Frame" then n = n + 1 end
+      end
+      return n
+    end,
+
     Show = function(self) record(self, "Show"); self.__shown = true end,
     Hide = function(self) record(self, "Hide"); self.__shown = false end,
     IsShown = function(self) return self.__shown ~= false end,
@@ -157,22 +188,6 @@ local function baseMethods(kind)
     RegisterForClicks = function(self, ...) record(self, "RegisterForClicks", ...) end,
     RegisterForDrag = function(self, ...) record(self, "RegisterForDrag", ...) end,
 
-    -- Children/regions access. The real API returns these as a vararg; this
-    -- stub returns a table. Skins normalize both (see CallList in the skins).
-    GetChildren = function(self)
-      local out = {}
-      for _, c in ipairs(self.__children) do
-        if c.__kind == "Frame" then out[#out + 1] = c end
-      end
-      return out
-    end,
-    GetRegions = function(self)
-      local out = {}
-      for _, c in ipairs(self.__children) do
-        if c.__kind ~= "Frame" then out[#out + 1] = c end
-      end
-      return out
-    end,
     SetAttribute = function(self, k, v)
       record(self, "SetAttribute", k, v)
       self.__attributes = self.__attributes or {}
@@ -301,6 +316,9 @@ local texExtra = {
     record(self, "SetColorTexture", r, g, b, a)
     self.__texture = nil
     self.__colorTexture = { r, g, b, a or 1 }
+    -- Real-client semantics: a colour texture is a white texture with a
+    -- vertex colour, so GetVertexColor returns the same values.
+    self.__vertexColor = { r, g, b, a or 1 }
   end,
   SetVertexColor = function(self, r, g, b, a)
     record(self, "SetVertexColor", r, g, b, a)

@@ -120,6 +120,143 @@ function theme.ApplyBoxButton(btn)
   return btn
 end
 
+-- ---------------------------------------------------------------------------
+-- Shared FlareUI chrome recipes (procedural, no art files)
+-- ---------------------------------------------------------------------------
+
+-- Unwrap an engine-guarded frame to the real frame, so chrome textures are
+-- parented and anchored to the frame the client knows (see Engine.lua).
+local function realFrame(frame)
+  if type(frame) ~= "table" then return nil end
+  return frame.__raw or frame
+end
+
+-- FlareUI's scrollbar: a 1px faint bronze track down the right margin and a
+-- 3px solid bronze thumb, both drawn with colour textures (ObjectiveTracker
+-- has no slider art either — its list is mouse-wheel scrolled).
+--   frame: the list's frame (guarded or raw)
+--   opts.state(): -> fraction (0..1 through the list), visibleRatio
+--                 (0..1 of the list that fits), scrollable (bool)
+-- Re-applied chrome is reused; nothing is resized except our own textures.
+function theme.ApplyScrollBar(frame, opts)
+  local rf = realFrame(frame)
+  if not (rf and rf.CreateTexture and rf.SetWidth) then return end
+  local chrome = rf.oxpfuiScroll
+  if not chrome then
+    local track = rf:CreateTexture(nil, "ARTWORK")
+    track:SetSnapToPixelGrid(false)
+    track:SetTexelSnappingBias(0)
+    track:SetWidth(1)
+    local thumb = rf:CreateTexture(nil, "OVERLAY")
+    thumb:SetSnapToPixelGrid(false)
+    thumb:SetTexelSnappingBias(0)
+    thumb:SetWidth(3)
+    chrome = { track = track, thumb = thumb }
+    rf.oxpfuiScroll = chrome
+  end
+  local box = theme.C.BOX
+  chrome.track:SetColorTexture(box[1], box[2], box[3], 0.25)
+  chrome.thumb:SetColorTexture(box[1], box[2], box[3], 1)
+  chrome.track:ClearAllPoints()
+  chrome.track:SetPoint("TOPRIGHT", rf, "TOPRIGHT", -6, -30)
+  chrome.track:SetPoint("BOTTOMRIGHT", rf, "BOTTOMRIGHT", -6, 8)
+
+  local fraction, visibleRatio, scrollable = 0, 1, false
+  if opts and opts.state then
+    local ok, frac, ratio, scroll = pcall(opts.state)
+    if ok then
+      fraction = frac or 0
+      visibleRatio = ratio or 1
+      scrollable = scroll and true or false
+    end
+  end
+  if fraction < 0 then fraction = 0 elseif fraction > 1 then fraction = 1 end
+  if visibleRatio < 0.05 then visibleRatio = 0.05 elseif visibleRatio > 1 then visibleRatio = 1 end
+
+  -- list body height: the frame minus its title row and bottom padding
+  local trackHeight = (rf:GetHeight() or 0) - 38
+  if trackHeight < 16 then trackHeight = 16 end
+  local thumbHeight = trackHeight * visibleRatio
+  if thumbHeight < 16 then thumbHeight = 16 end
+  local offset = (trackHeight - thumbHeight) * fraction
+  chrome.thumb:ClearAllPoints()
+  chrome.thumb:SetPoint("TOPRIGHT", chrome.track, "TOPRIGHT", -1, -offset)
+  chrome.thumb:SetHeight(thumbHeight)
+
+  if scrollable then
+    chrome.track:Show()
+    chrome.thumb:Show()
+  else
+    chrome.track:Hide()
+    chrome.thumb:Hide()
+  end
+end
+
+-- FlareUI's bronze square button, redrawn procedurally (no art file):
+-- a bronze outline with chamfered corner steps around a near-black fill,
+-- every rect a whole-pixel colour texture with snapping off. Applied over
+-- an existing OpenXP button — nothing about the button is moved or resized;
+-- the button's own icon and label draw on top. Hover lights the outline to
+-- the frame-border bronze (C.BOX -> C.BOX_LIT) via hooked scripts, leaving
+-- whatever OpenXP's own OnEnter/OnLeave do untouched.
+--   opts.size:   square size in pixels (default 12, FlareUI's header button)
+--   opts.offset: {x, y} shift from the button's centre, in pixels
+function theme.ApplyBoxButtonPaint(button, opts)
+  local rf = realFrame(button)
+  if not (rf and rf.CreateTexture and rf.HookScript) then return end
+  opts = opts or {}
+  local size = math.floor(opts.size or 12)
+  local dx = (opts.offset and opts.offset.x) or 0
+  local dy = (opts.offset and opts.offset.y) or 0
+
+  local chrome = rf.oxpfuiBox
+  if not chrome then
+    local function rect(w, h)
+      local t = rf:CreateTexture(nil, "BACKGROUND")
+      t:SetSnapToPixelGrid(false)
+      t:SetTexelSnappingBias(0)
+      t:SetWidth(w)
+      t:SetHeight(h)
+      return t
+    end
+    -- half the square, from its centre
+    local half = size / 2
+    local function place(t, x, y)
+      t:SetPoint("TOPLEFT", rf, "CENTER", dx + x, dy + y)
+    end
+    local outline = {}
+    -- four edges
+    outline[1] = rect(size, 1);      place(outline[1], -half, half)        -- top
+    outline[2] = rect(size, 1);      place(outline[2], -half, -half + 1)   -- bottom
+    outline[3] = rect(1, size - 2);  place(outline[3], -half, half - 1)    -- left
+    outline[4] = rect(1, size - 2);  place(outline[4], half - 1, half - 1) -- right
+    -- four chamfer steps just outside the corners
+    outline[5] = rect(2, 1)
+    outline[5]:SetPoint("BOTTOMRIGHT", rf, "CENTER", dx - half, dy + half)
+    outline[6] = rect(2, 1)
+    outline[6]:SetPoint("BOTTOMLEFT", rf, "CENTER", dx + half, dy + half)
+    outline[7] = rect(2, 1)
+    outline[7]:SetPoint("TOPRIGHT", rf, "CENTER", dx - half, dy - half)
+    outline[8] = rect(2, 1)
+    outline[8]:SetPoint("TOPLEFT", rf, "CENTER", dx + half, dy - half)
+    local fill = rect(size - 2, size - 2)
+    fill:SetPoint("TOPLEFT", rf, "CENTER", dx - half + 1, dy + half - 1)
+    fill:SetColorTexture(0, 0, 0, 0.85)
+    chrome = { size = size, outline = outline, fill = fill }
+    rf.oxpfuiBox = chrome
+    local function paint(lit)
+      local c = lit and theme.C.BOX_LIT or theme.C.BOX
+      for _, t in ipairs(chrome.outline) do
+        t:SetColorTexture(c[1], c[2], c[3], 1)
+      end
+    end
+    chrome.paint = paint
+    rf:HookScript("OnEnter", function() paint(true) end)
+    rf:HookScript("OnLeave", function() paint(false) end)
+  end
+  chrome.paint(false)
+end
+
 -- Sub-panel inset: the warm dark fill at a slightly firmer opacity than the
 -- window (OpenXP's own sub-panels are a step lighter than their windows),
 -- with a bronze hairline instead of border art — the window already wears
