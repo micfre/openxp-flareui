@@ -983,6 +983,121 @@ class Talents(unittest.TestCase):
             (0.65, 0.49, 0.27, 1.0))
         self.assertEqual(env.chat(), [])
 
+    def assert_flareui_look(self, env):
+        self.assertEqual(env.run(
+            "local c = PlayerTalentFrameRXPTalentsBG.__vertexColor; return c[1],c[2],c[3]"),
+            (0.65, 0.49, 0.27))
+        self.assertEqual(env.run("return RXP_TalentsMenuFrame.backdrop.edgeFile"), FLAREUI_EDGE)
+
+    def assert_openxp_look(self, env):
+        self.assertEqual(env.run(
+            "local c = PlayerTalentFrameRXPTalentsBG.__vertexColor; return c[1],c[2],c[3]"),
+            (1.0, 1.0, 1.0))
+        self.assertEqual(env.run("return RXP_TalentsMenuFrame.backdrop.edgeFile"), OPENXP_EDGE)
+
+    # -- lazily created frames (story 23) ------------------------------------
+
+    def test_menu_list_frame_is_skinned_once_the_menu_has_been_opened(self):
+        env = Env()
+        env.boot()
+        env.run("HARNESS.OpenTalentsMenu()")
+        # Created after the last apply pass: still OpenXP's own look...
+        self.assertIsNone(env.run("return RXP_TalentsMenuFrameListFrame.backdrop"))
+        # ...and the next OpenXP re-render brings it into the look.
+        env.run("HARNESS.openxp:RenderFrame()")
+        self.assertEqual(env.run("return RXP_TalentsMenuFrameListFrame.backdrop.edgeFile"),
+                         FLAREUI_EDGE)
+        self.assertEqual(env.chat(), [])
+
+    # -- Blizzard frames stay untouched (stories 18-20) -----------------------
+
+    def test_blizzard_talent_frame_and_rows_are_never_touched(self):
+        env = Env()
+        blizzard = ("PlayerTalentFrame", "PlayerTalentFrameTalent1",
+                    "PlayerTalentFrameTalent1_levelText")
+        before = {f: env.calls_made_on(f) for f in blizzard}
+        env.boot()
+        env.run("HARNESS.openxp:RenderFrame()")
+        env.run("HARNESS.openxp:ReloadTheme()")
+        for f in blizzard:
+            self.assertEqual(env.calls_made_on(f), before[f], f"{f} was touched")
+        # The level tag keeps OpenXP's own font (deliberate, see SkinWindows).
+        self.assertEqual(env.run(
+            "local p,s,f = PlayerTalentFrameTalent1_levelText.text:GetFont(); return p,s,f"),
+            ("Fonts\\ARIALN.TTF", 10, "OUTLINE"))
+
+    # -- re-apply after OpenXP refreshes (stories 22-23) ----------------------
+
+    def test_skin_wins_after_every_openxp_refresh(self):
+        for call in ("HARNESS.openxp:RenderFrame()", "HARNESS.openxp:ReloadTheme()",
+                     "HARNESS.openxp.card.SkinPanels()"):
+            with self.subTest(call=call):
+                env = Env()
+                env.boot()
+                env.run(call)
+                self.assert_flareui_look(env)
+                self.assertEqual(env.chat(), [])
+
+    # -- switches (stories 24-25) ----------------------------------------------
+
+    def test_per_window_switch_off_leaves_the_talents_surfaces_untouched(self):
+        env = Env(db={"windows": {"talents": False}})
+        env.boot()
+        env.run("HARNESS.openxp:RenderFrame()")
+        self.assert_openxp_look(env)
+        env.slash("/oxpfui debug")
+        self.assertIn("window 'talents' is switched off", "\n".join(env.chat()))
+
+    def test_master_switch_off_leaves_the_talents_surfaces_untouched(self):
+        env = Env(db={"enabled": False})
+        env.boot()
+        env.run("HARNESS.openxp:RenderFrame()")
+        self.assert_openxp_look(env)
+        self.assertEqual(env.chat(), [])
+
+    # -- robustness (stories 31-32) ---------------------------------------------
+
+    def test_missing_frames_are_skipped_quietly_without_errors(self):
+        # A future OpenXP rename drops the tab button and the menu entirely.
+        env = Env()
+        env.run("""
+          _G.PlayerTalentFrameRXPTalents = nil
+          _G.RXP_TalentsMenuFrame = nil
+          HARNESS.openxp.talents = nil
+        """)
+        env.boot()
+        env.run("HARNESS.openxp:RenderFrame()")
+        self.assertEqual(env.chat(), [])
+        env.slash("/oxpfui debug")
+        report = "\n".join(env.chat())
+        self.assertIn("missing frame PlayerTalentFrameRXPTalents", report)
+        self.assertIn("Errors: none", report)
+
+    def test_missing_box_art_is_skipped_quietly(self):
+        env = Env()
+        env.run("_G.PlayerTalentFrameRXPTalents.bg = nil")
+        env.boot()
+        self.assertEqual(env.chat(), [])
+        # The menu is still skinned; only the missing texture is skipped.
+        self.assertEqual(env.run("return RXP_TalentsMenuFrame.backdrop.edgeFile"), FLAREUI_EDGE)
+        env.slash("/oxpfui debug")
+        self.assertIn("Errors: none", "\n".join(env.chat()))
+
+    # -- appearance only (story 29) -----------------------------------------------
+
+    def test_no_position_or_size_is_ever_changed(self):
+        env = Env()
+        layout = ("SetPoint", "SetSize", "SetWidth", "SetHeight", "SetScale",
+                  "SetAllPoints", "ClearAllPoints")
+        family = ("PlayerTalentFrameRXPTalents", "PlayerTalentFrameRXPTalentsBG",
+                  "RXP_TalentsMenuFrame")
+        before = {(f, m): env.calls_made_on(f, m) for f in family for m in layout}
+        env.boot()
+        env.run("HARNESS.openxp:RenderFrame()")
+        for (f, m), count in before.items():
+            self.assertEqual(env.calls_made_on(f, m), count,
+                             f"{f}:{m} was called by the skin")
+
 
 if __name__ == "__main__":
     unittest.main()
