@@ -1,0 +1,28 @@
+# Third-party local reference copies
+/prior_art/
+
+# Local tooling and credentials
+/.agents/
+/.claude/
+/.codex/
+/.aws/
+.env
+.env.*
+!.env.example
+
+# Generated artifacts (scripts/build.sh writes here)
+/dist/
+/build/
+*.zip
+
+# Editor and operating-system files
+.DS_Store
+Thumbs.db
+*.swp
+*~
+.idea/
+.vscode/
+
+# Python bytecode (utility scripts)
+__pycache__/
+*.pyc
