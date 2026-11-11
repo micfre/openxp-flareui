@@ -181,7 +181,7 @@ end
 
 -- Unwrap an engine-guarded frame to the real frame, so chrome textures are
 -- parented and anchored to the frame the client knows (see Engine.lua).
-local function realFrame(frame)
+function theme.RealFrame(frame)
   if type(frame) ~= "table" then return nil end
   return frame.__raw or frame
 end
@@ -194,7 +194,7 @@ end
 --                 (0..1 of the list that fits), scrollable (bool)
 -- Re-applied chrome is reused; nothing is resized except our own textures.
 function theme.ApplyScrollBar(frame, opts)
-  local rf = realFrame(frame)
+  local rf = theme.RealFrame(frame)
   if not (rf and rf.CreateTexture and rf.SetWidth) then return end
   local chrome = rf.oxpfuiScroll
   if not chrome then
@@ -257,7 +257,7 @@ end
 --   opts.size:   square size in pixels (default 12, FlareUI's header button)
 --   opts.offset: {x, y} shift from the button's centre, in pixels
 function theme.ApplyBoxButtonPaint(button, opts)
-  local rf = realFrame(button)
+  local rf = theme.RealFrame(button)
   if not (rf and rf.CreateTexture and rf.HookScript) then return end
   opts = opts or {}
   local size = math.floor(opts.size or 12)

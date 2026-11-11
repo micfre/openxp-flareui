@@ -14,13 +14,6 @@ local ADDON_NAME, OXPFUI = ...
 local theme = OXPFUI.theme
 local C = theme.C
 
--- Guarded frames carry the raw frame in .__raw (see Engine.lua): chrome
--- textures created here must be parented and anchored to the real frame.
-local function raw(frame)
-  if type(frame) ~= "table" then return nil end
-  return frame.__raw or frame
-end
-
 local function fields(obj, ...)
   if type(obj) ~= "table" then return false end
   for i = 1, select("#", ...) do
@@ -122,8 +115,8 @@ end
 -- FlareUI's header band: a divider texture right under OpenXP's header.
 -- Own texture, anchored to the header; the header itself never moves.
 local function ensureDivider(cardFrame, header)
-  local rf = raw(cardFrame)
-  local hf = raw(header)
+  local rf = theme.RealFrame(cardFrame)
+  local hf = theme.RealFrame(header)
   if not (rf and rf.CreateTexture and hf) then return end
   local t = rf.oxpfuiDivider
   if not t then
@@ -256,7 +249,7 @@ local function Apply(ctx)
   if not f then return end
   local openxp = ctx.OpenXP()
   local cardModule = openxp and openxp.card or nil
-  local rf = raw(f)
+  local rf = theme.RealFrame(f)
 
   -- Bronze border art + warm near-black fill at the panel opacity setting.
   theme.ApplyBackdrop(f)
