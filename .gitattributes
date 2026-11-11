@@ -1,0 +1,6 @@
+# Bundled third-party files must round-trip byte-exactly (license notices
+# and font/border binaries): disable any line-ending conversion for them.
+src/OXP-FUI/Media/** -text
+src/OXP-FUI/License/** -text
+*.tga -text
+*.ttf -text
