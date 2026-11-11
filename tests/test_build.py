@@ -122,13 +122,13 @@ class Build(unittest.TestCase):
 
     def test_toc_and_engine_agree_on_the_tested_openxp_version(self):
         toc_version = toc_meta()["X-Tested-OpenXP"]
-        engine = (DIST / "Engine.lua").read_text()
+        core = (DIST / "Core.lua").read_text()
         lua_version = next(
-            (line.strip() for line in engine.splitlines()
+            (line.strip() for line in core.splitlines()
              if "testedOpenXP" in line and line.strip().startswith("OXPFUI.testedOpenXP")),
             None,
         )
-        self.assertIsNotNone(lua_version, "OXPFUI.testedOpenXP missing from Engine.lua")
+        self.assertIsNotNone(lua_version, "OXPFUI.testedOpenXP missing from Core.lua")
         self.assertIn(f'"{toc_version}"', lua_version)
 
 
