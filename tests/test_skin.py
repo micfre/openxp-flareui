@@ -19,14 +19,14 @@ ARROW_SKIN = """
 OXPFUI.RegisterSkin{
   name = "test-arrow",
   windows = { "arrow" },
-  Apply = function(ctx)
+    Apply = function(ctx)
     local f = ctx.Frame("RXPG_ARROW")
     if not f then return end
     ctx.theme.ApplyBackdrop(f)
     local fs = f.text
     if fs then
       ctx.theme.ApplyFontString(fs, "body")
-      fs:SetTextColor(1, 0.82, 0)
+      ctx.theme.ApplyTextColor(fs, "TITLE")
     end
   end,
 }
@@ -126,7 +126,7 @@ class SkinApplication(unittest.TestCase):
             "local p,s,f = RXPG_ARROW.text:GetFont(); return p,s,f"),
             ("Fonts\\FRIZQT__.TTF", 11, ""))
         self.assertEqual(env.run(
-            "local r,g,b,a = RXPG_ARROW.text:GetTextColor(); return r,g,b,a"), (1.0, 0.82, 0.0, None))
+            "local r,g,b,a = RXPG_ARROW.text:GetTextColor(); return r,g,b,a"), (1.0, 0.82, 0.0, 1.0))
 
     def test_chosen_condensed_font_is_used(self):
         env = Env(db={"font": "Roboto Condensed"})
@@ -397,6 +397,129 @@ class VersionNote(unittest.TestCase):
         self.assertIsNone(env.run("return _G.RXPG_ARROW"))  # no OpenXP at all
         env.slash("/oxpfui debug")
         self.assertIn("OpenXP was not found", "\n".join(env.chat()))
+
+
+class SettingsPanel(unittest.TestCase):
+    def test_slash_opens_flareui_styled_panel(self):
+        env = Env()
+        env.boot()
+        env.slash("/oxpfui")
+        self.assertEqual(env.run("return OXPFUIPanel:IsShown()"), True)
+        # FlareUI look: bundled border art at edge size 16, bronze tint,
+        # panel opacity fill, gold Friz Quadrata header with 1px shadow.
+        self.assertEqual(env.run("return OXPFUIPanel.backdrop.edgeFile"),
+                         "Interface\\AddOns\\OXP-FUI\\Media\\Borders\\FlareUI-Frames.tga")
+        self.assertEqual(env.run("return OXPFUIPanel.backdrop.edgeSize"), 16)
+        self.assertEqual(env.run(
+            "local r,g,b,a = OXPFUIPanel:GetBackdropBorderColor(); return r,g,b,a"),
+            (0.65, 0.49, 0.27, 1.0))
+        self.assertEqual(env.run(
+            "local p,s,f = OXPFUIPanel.title:GetFont(); return p,s,f"),
+            ("Fonts\\FRIZQT__.TTF", 13, ""))
+        self.assertEqual(env.run(
+            "local r,g,b,a = OXPFUIPanel.title:GetTextColor(); return r,g,b,a"),
+            (1.0, 0.82, 0.0, 1.0))
+        self.assertEqual(env.run(
+            "local x,y = OXPFUIPanel.title:GetShadowOffset(); return x,y"), (1, -1))
+
+    def test_panel_has_switch_for_every_window(self):
+        env = Env()
+        env.boot()
+        env.slash("/oxpfui")
+        from harness.env import ADDON_FILES  # noqa: F401  (order checked by build tests)
+        for key in ("arrow", "card", "targets", "welcome", "feedback",
+                    "tracker", "talents", "upgrades", "inventory",
+                    "activeitems", "tooltips"):
+            self.assertTrue(env.run(f"return OXPFUIPanel.windowBtns[{key!r}] ~= nil"),
+                            f"panel missing a toggle for window '{key}'")
+
+    def test_master_and_window_switches_write_the_saved_db(self):
+        env = Env()
+        env.boot()
+        env.slash("/oxpfui")
+        self.assertEqual(env.run("return OXPFUIDB.enabled"), True)
+        env.run("OXPFUIPanel.masterBtn:Click()")
+        self.assertEqual(env.run("return OXPFUIDB.enabled"), False)
+        env.run("OXPFUIPanel.masterBtn:Click()")
+        self.assertEqual(env.run("return OXPFUIDB.enabled"), True)
+
+        env.run("OXPFUIPanel.windowBtns['arrow']:Click()")
+        self.assertEqual(env.run("return OXPFUIDB.windows['arrow']"), False)
+        env.run("OXPFUIPanel.windowBtns['arrow']:Click()")
+        self.assertEqual(env.run("return OXPFUIDB.windows['arrow']"), True)
+
+    def test_font_and_border_cycle_and_opacity_slider_write_db(self):
+        env = Env()
+        env.boot()
+        env.slash("/oxpfui")
+        # Font cycles Friz Quadrata -> Asap -> ... -> back.
+        env.run("OXPFUIPanel.fontBtn:Click()")
+        self.assertEqual(env.run("return OXPFUIDB.font"), "Asap Condensed")
+        env.run("OXPFUIPanel.fontBtn:Click()")
+        self.assertEqual(env.run("return OXPFUIDB.font"), "Barlow Condensed")
+        # Border cycles Frames -> Thick -> Thin.
+        self.assertEqual(env.run("return OXPFUIDB.borderStyle"), "Frames")
+        env.run("OXPFUIPanel.borderBtn:Click()")
+        self.assertEqual(env.run("return OXPFUIDB.borderStyle"), "Thick")
+        env.run("OXPFUIPanel.borderBtn:Click()")
+        self.assertEqual(env.run("return OXPFUIDB.borderStyle"), "Thin")
+        # Opacity slider.
+        env.run("OXPFUIPanel.opacitySlider:SetValue(0.85)")
+        self.assertEqual(env.run("return OXPFUIDB.opacity"), 0.85)
+
+    def test_setting_changes_reapply_the_skin_immediately(self):
+        env = Env()
+        env.install_skins(ARROW_SKIN)
+        env.boot()
+        env.slash("/oxpfui")
+        env.run("OXPFUIPanel.fontBtn:Click()")  # -> Asap Condensed
+        self.assertEqual(env.run("return (RXPG_ARROW.text:GetFont())"),
+                         "Interface\\AddOns\\OXP-FUI\\Media\\Fonts\\AsapCondensed-Regular.ttf")
+        env.run("OXPFUIPanel.opacitySlider:SetValue(0.3)")
+        self.assertEqual(env.run(
+            "local r,g,b,a = RXPG_ARROW:GetBackdropColor(); return a"), 0.3)
+
+    def test_panel_never_touches_openxp_frames(self):
+        env = Env()
+        env.boot()
+        frames = ("OpenXPCard", "RXPG_ARROW", "RXPTargetFrame", "RXPFrame",
+                  "GameTooltip", "WorldMapFrame")
+        # Baseline: the fake OpenXP styles its own frames during setup.
+        baseline = {f: env.calls_made_on(f) for f in frames}
+        env.slash("/oxpfui")
+        env.run("OXPFUIPanel.masterBtn:Click()")
+        env.run("OXPFUIPanel.windowBtns['card']:Click()")
+        env.run("OXPFUIPanel.fontBtn:Click()")
+        env.run("OXPFUIPanel.borderBtn:Click()")
+        env.run("OXPFUIPanel.opacitySlider:SetValue(0.5)")
+        env.run("OXPFUIPanel.closeBtn:Click()")
+        for frame in frames:
+            self.assertEqual(env.calls_made_on(frame), baseline[frame],
+                             f"{frame} was touched by the settings panel")
+
+    def test_version_note_in_panel_when_versions_differ(self):
+        env = Env(openxp_version="1.3.40")
+        env.boot()
+        env.slash("/oxpfui")
+        self.assertIsNotNone(env.run("return OXPFUIPanel.versionNote"))
+        self.assertIn("1.3.40", env.run("return OXPFUIPanel.versionNote:GetText()"))
+        # No note when versions match.
+        env2 = Env(openxp_version="1.3.48")
+        env2.boot()
+        env2.slash("/oxpfui")
+        self.assertIsNone(env2.run("return OXPFUIPanel.versionNote"))
+
+    def test_panel_strings_come_from_the_locale_table(self):
+        env = Env()
+        env.boot()
+        env.slash("/oxpfui")
+        for key in ("arrow", "card", "targets", "welcome", "feedback",
+                    "tracker", "talents", "upgrades", "inventory",
+                    "activeitems", "tooltips"):
+            label = env.run(f"return OXPFUI.L.windows[{key!r}]")
+            self.assertTrue(label and len(label) > 2, f"missing locale label for {key}")
+        self.assertEqual(env.run("return OXPFUIPanel.reloadNote:GetText()"),
+                         env.run("return OXPFUI.L.reloadNote"))
 
 
 if __name__ == "__main__":
