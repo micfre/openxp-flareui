@@ -50,13 +50,9 @@ OXPFUI.RegisterSkin{
 
     local title = ctx.Frame("RXPTargetFrame_title")
     if title then
-      if title.text then
-        theme.ApplyFontString(title.text, "header")
-        theme.ApplyTextColor(title.text, "TITLE")
-      end
+      theme.ApplyTitleStrip(title)
       if title.keyHint then
-        theme.ApplyFontString(title.keyHint, "body")
-        theme.ApplyTextColor(title.keyHint, "DIM")
+        theme.ApplyText(title.keyHint, "body", "DIM")
       end
     end
 

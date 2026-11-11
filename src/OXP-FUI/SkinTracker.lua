@@ -71,7 +71,7 @@ OXPFUI.RegisterSkin{
       local title = ctx.Frame("RXPLevelSplits_title")
       if title then
         theme.ApplyBackdrop(title)
-        theme.ApplyText(title.text, "header", "TITLE")
+        theme.ApplyTitleStrip(title)
         local cog = ctx.Frame("RXPLevelSplits_titleCogwheel")
         if cog and cog.GetNormalTexture then
           tintBronze(cog:GetNormalTexture())

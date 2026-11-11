@@ -120,6 +120,16 @@ function theme.ApplyPanelFill(frame)
   frame:SetBackdropColor(1, 1, 1, opacity)
 end
 
+-- OpenXP's title strips (the X_title frames): their .text becomes a
+-- FlareUI gold header. Nil-safe, like ApplyText. The strip frame itself —
+-- border art (ApplyBackdrop), panel fill (ApplyPanelFill) or nothing — is
+-- styled by the caller, because the skins differ there.
+function theme.ApplyTitleStrip(frame)
+  if type(frame) == "table" then
+    theme.ApplyText(frame.text, "header", "TITLE")
+  end
+end
+
 -- Apply the FlareUI typography to a font string: chosen face, size for its
 -- kind, no outline, 1px black shadow at (+1, -1).
 function theme.ApplyFontString(fs, kind)

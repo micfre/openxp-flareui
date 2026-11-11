@@ -141,10 +141,7 @@ OXPFUI.RegisterSkin{
       -- OpenXP's V1 visuals give the strip its own legacy edge backdrop;
       -- a FlareUI header band sits on the panel fill instead.
       theme.ApplyPanelFill(title)
-      if title.text then
-        theme.ApplyFontString(title.text, "header")
-        theme.ApplyTextColor(title.text, "TITLE")
-      end
+      theme.ApplyTitleStrip(title)
     end
   end,
 }
