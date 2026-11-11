@@ -41,6 +41,7 @@ local L = {
   debugWindows = "Windows: %s",
   debugPasses = "Apply passes: %d (last: %s)",
   debugNone = "none",
+  debugApplied = "Skinned: %s",
   debugSkipped = "Skipped: %s",
   debugErrors = "Errors: %s",
   debugBlocked = "Blocked layout attempts: %d (latest: %s)",

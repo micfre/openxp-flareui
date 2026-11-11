@@ -93,6 +93,22 @@ OXPFUI.RegisterSkin{
 }
 """
 
+# Errors only on its first apply pass; used to test the debug report's
+# error-history labelling.
+FLAKY_SKIN = """
+local failed = false
+OXPFUI.RegisterSkin{
+  name = "test-flaky",
+  windows = { "arrow" },
+  Apply = function()
+    if not failed then
+      failed = true
+      error("boom")
+    end
+  end,
+}
+"""
+
 LAYOUT_VIOLATING_SKIN = """
 OXPFUI.RegisterSkin{
   name = "test-mover",
@@ -282,6 +298,41 @@ class LoadsQuietly(unittest.TestCase):
             for method in TOOLTIP_FRAME_METHODS:
                 self.assertEqual(env.calls_made_on(frame, method), 0,
                                  f"{frame}:{method} while the master switch is off")
+
+
+class DebugReport(unittest.TestCase):
+    """/oxpfui debug (spec story 33): the report says which windows were
+    skinned, what was skipped and why — for the latest apply pass, never
+    stale history presented as current."""
+
+    def skinned_lines(self, env):
+        return [l for l in env.chat() if l.startswith("Skinned:")]
+
+    def test_lists_the_shipped_skins_that_applied_in_the_latest_pass(self):
+        env = Env()
+        env.boot()
+        env.slash("/oxpfui debug")
+        # Registration (TOC) order. "Skinned" lists every skin whose Apply
+        # completed in the pass; what a completed skin could not dress (the
+        # lazily-created welcome/feedback windows, the unopened talents
+        # menu) is itemized in "Skipped" with its reason.
+        self.assertEqual(self.skinned_lines(env), [
+            "Skinned: arrow, card, targets, tracker, talents, upgrades, "
+            "inventory, activeitems, tooltips, welcome, feedback",
+        ])
+        report = "\n".join(env.chat())
+        self.assertIn("welcome — missing frame OpenXPWelcomeFrame", report)
+        self.assertIn("feedback — missing frame OpenXPFeedbackFrame", report)
+
+    def test_does_not_list_skins_that_did_not_apply(self):
+        env = Env(db={"windows": {"card": False}})
+        env.boot()
+        env.slash("/oxpfui debug")
+        # The card skin is gated off, so its Apply never runs: not listed.
+        self.assertEqual(self.skinned_lines(env), [
+            "Skinned: arrow, targets, tracker, talents, upgrades, "
+            "inventory, activeitems, tooltips, welcome, feedback",
+        ])
 
 
 class RefreshReapply(unittest.TestCase):
