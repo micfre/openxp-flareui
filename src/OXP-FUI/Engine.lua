@@ -416,24 +416,29 @@ function OXPFUI.DebugReport()
   -- Per-skin outcome of the latest pass: which skins actually applied (the
   -- "Skinned" list), what was skipped or deferred and why. Only entries of
   -- the latest pass count, so stale outcomes from earlier passes are never
-  -- reported as current.
-  local applied = {}
+  -- reported as current. Errors from earlier passes are useful bug-report
+  -- history and stay, clearly labelled as such.
+  local applied, skips, errs, earlierErrs = {}, {}, {}, {}
   for _, e in ipairs(logEntries) do
-    if e.pass == state.passes and e.type == "applied" then
-      applied[#applied + 1] = e.skin
+    if e.pass == state.passes then
+      if e.type == "applied" then
+        applied[#applied + 1] = e.skin
+      elseif e.type == "skip" or e.type == "deferred" then
+        skips[#skips + 1] = e.skin .. " — " .. e.info
+      elseif e.type == "error" then
+        errs[#errs + 1] = e.skin .. " — " .. e.info
+      end
+    elseif e.type == "error" then
+      earlierErrs[#earlierErrs + 1] = e.skin .. " — " .. e.info
     end
-  end
-  local skips, errs = {}, {}
-  for _, e in ipairs(logEntries) do
-    if e.type == "skip" or e.type == "deferred" then
-      skips[#skips + 1] = e.skin .. " — " .. e.info
-    end
-    if e.type == "error" then errs[#errs + 1] = e.skin .. " — " .. e.info end
   end
   lines[#lines + 1] = L.debugApplied:format(
     #applied > 0 and table.concat(applied, ", ") or L.debugNone)
   lines[#lines + 1] = L.debugSkipped:format(#skips > 0 and table.concat(skips, "; ") or L.debugNone)
   lines[#lines + 1] = L.debugErrors:format(#errs > 0 and table.concat(errs, "; ") or L.debugNone)
+  if #earlierErrs > 0 then
+    lines[#lines + 1] = L.debugErrorsEarlier:format(table.concat(earlierErrs, "; "))
+  end
   lines[#lines + 1] = L.debugBlocked:format(blockedCount, blockedLatest or L.debugNone)
 
   return table.concat(lines, "\n")

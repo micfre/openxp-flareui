@@ -334,6 +334,40 @@ class DebugReport(unittest.TestCase):
             "inventory, activeitems, tooltips, welcome, feedback",
         ])
 
+    def test_skips_from_earlier_passes_are_not_reported_as_current(self):
+        env = Env()
+        env.install_skins(ARROW_SKIN)
+        env.boot()
+        # A pass with the arrow window switched off, then a later pass with
+        # it back on: only the latest pass may be reported.
+        env.run("OXPFUIDB.windows['arrow'] = false")
+        env.run("OXPFUI.Reapply('test: arrow off')")
+        env.run("OXPFUIDB.windows['arrow'] = true")
+        env.run("OXPFUI.Reapply('test: arrow on')")
+        env.slash("/oxpfui debug")
+        report = "\n".join(env.chat())
+        self.assertNotIn("switched off", report)
+        self.assertEqual(self.skinned_lines(env),
+                         ["Skinned: arrow, card, targets, tracker, talents, "
+                          "upgrades, inventory, activeitems, tooltips, "
+                          "welcome, feedback, test-arrow"])
+
+    def test_errors_from_earlier_passes_are_kept_as_labelled_history(self):
+        env = Env()
+        env.install_skins(FLAKY_SKIN)
+        env.boot()  # pass 1: test-flaky errors with "boom"
+        env.run("OXPFUI.Reapply('test: flaky recovers')")  # later pass: clean
+        env.slash("/oxpfui debug")
+        report = "\n".join(env.chat())
+        # The latest pass is clean...
+        self.assertIn("Errors: none", report)
+        # ...and the earlier failure is still there for a bug report, but
+        # clearly labelled as history, not as a current error.
+        earlier = [l for l in env.chat() if l.startswith("Earlier errors")]
+        self.assertEqual(len(earlier), 1)
+        self.assertIn("test-flaky — ", earlier[0])
+        self.assertIn("boom", earlier[0])
+
 
 class RefreshReapply(unittest.TestCase):
     """OXP-FUI must win over OpenXP's own theme/font/outline settings: every

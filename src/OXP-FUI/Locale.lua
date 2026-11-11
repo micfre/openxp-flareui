@@ -44,6 +44,7 @@ local L = {
   debugApplied = "Skinned: %s",
   debugSkipped = "Skipped: %s",
   debugErrors = "Errors: %s",
+  debugErrorsEarlier = "Earlier errors (previous passes): %s",
   debugBlocked = "Blocked layout attempts: %d (latest: %s)",
 }
 
