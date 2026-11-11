@@ -122,14 +122,76 @@ local function ArrowUpdate(self)
 end
 
 -- Quest Targets (phase 1) ---------------------------------------------------
+-- Mirrors Targeting.lua: the frame, its title strip ("QUEST TARGETS" + a
+-- keybind hint), the "KILL"/"TALK TO" section labels and the SECURE target
+-- rows (SecureActionButtonTemplate macro buttons) with their RowifyTargets
+-- internals: hl highlight, 2px class strip (bar), iconHolder + icon, key and
+-- label font strings. Buttons are created on demand in the real addon and
+-- kept in targetFrame.enemyTargetButtons / .friendlyTargetButtons.
 local tf = CreateFrame("Frame", "RXPTargetFrame", UIParent, "BackdropTemplate")
 local tfTitle = CreateFrame("Frame", "RXPTargetFrame_title", tf)
 tfTitle.text = tfTitle:CreateFontString(nil, "OVERLAY")
 tf.title = tfTitle
--- A secure enemy button (SecureActionButtonTemplate in the real addon).
-local eb = CreateFrame("Button", "RXPTargetFrame_EnemyButton1", tf, "SecureActionButtonTemplate")
-eb.__protected = true
-eb.label = eb:CreateFontString(nil, "OVERLAY")
+tfTitle.keyHint = tfTitle:CreateFontString(nil, "OVERLAY")
+tfTitle.keyHint:SetFont("Fonts\\ARIALN.TTF", 10, "")
+tfTitle.keyHint:SetText("nearest T")
+tfTitle.keyHint:SetTextColor(0.54, 0.56, 0.61, 1)
+
+tf.sections = {}
+for _, secpair in ipairs({ { "enemy", "KILL" }, { "friendly", "TALK TO" } }) do
+  local fs = tf:CreateFontString(nil, "OVERLAY")
+  fs:SetFont("Fonts\\ARIALN.TTF", 10, "")
+  fs:SetText(secpair[2])
+  fs:SetTextColor(0.54, 0.56, 0.61, 1)
+  tf.sections[secpair[1]] = fs
+end
+
+-- RowifyTargets (Targeting.lua 1089-1124): the OpenXP row look.
+local function rowify(btn, kind)
+  btn.kind = kind
+  btn.hl = btn:CreateTexture(nil, "BACKGROUND")
+  btn.hl:SetAllPoints()
+  btn.hl:SetColorTexture(1, 1, 1, 0)
+  btn.bar = btn:CreateTexture(nil, "ARTWORK")
+  btn.bar:SetWidth(2)
+  if kind == "enemy" then
+    btn.bar:SetColorTexture(1, 112 / 255, 67 / 255, 1)
+  else
+    btn.bar:SetColorTexture(61 / 255, 187 / 255, 122 / 255, 1)
+  end
+  btn.iconHolder = CreateFrame("Frame", nil, btn)
+  btn.icon = btn.iconHolder:CreateTexture(nil, "ARTWORK")
+  btn.key = btn:CreateFontString(nil, "OVERLAY")
+  btn.key:SetFont("Fonts\\ARIALN.TTF", 10, "")
+  btn.key:SetTextColor(0.54, 0.56, 0.61, 1)
+  btn.label = btn:CreateFontString(nil, "OVERLAY")
+  btn.label:SetFont("Fonts\\ARIALN.TTF", 12, "")
+  btn.label:SetTextColor(0.92, 0.93, 0.95, 1)
+end
+
+tf.enemyTargetButtons = {}
+tf.friendlyTargetButtons = {}
+local function targetButton(list, globalName, kind, macrotext)
+  local btn = CreateFrame("Button", globalName, tf, "SecureActionButtonTemplate")
+  btn.__protected = true
+  btn:SetAttribute("type", "macro")
+  btn:SetAttribute("macrotext", macrotext)
+  btn:RegisterForClicks("AnyUp", "AnyDown")
+  rowify(btn, kind)
+  list[#list + 1] = btn
+  return btn
+end
+
+local eb1 = targetButton(tf.enemyTargetButtons, "RXPTargetFrame_EnemyButton1",
+  "enemy", "/targetexact Forest Lurker")
+targetButton(tf.enemyTargetButtons, "RXPTargetFrame_EnemyButton2",
+  "enemy", "/targetexact Mangy Wolf")
+targetButton(tf.friendlyTargetButtons, "RXPTargetFrame_FriendlyButton1",
+  "friendly", "/targetexact Wing Commander")
+
+-- The secure template runs the macro on click; the fake records it so tests
+-- can prove targeting still works after OXP-FUI restyles the rows.
+eb1:SetScript("OnClick", function() bump("RXPTargetFrame_EnemyButton1 click") end)
 
 -- Phase 2 windows -----------------------------------------------------------
 local itemFrame = CreateFrame("Frame", "RXPItemFrame", UIParent, "BackdropTemplate")
@@ -182,6 +244,51 @@ local function applyOpenXPLook(frame, fontString)
   end
 end
 
+-- The Quest Targets family reset to OpenXP's own look (Targeting.lua 813-838,
+-- 899-908, 1089-1137). Nil-safe so tests can simulate frames going missing.
+function HARNESS.ApplyTargetsOpenXPLook()
+  local tf = N("RXPTargetFrame")
+  if not tf then return end
+  applyOpenXPLook(tf, tf.title and tf.title.text or nil)
+  -- Harness stand-in: a backdrop on the secure enemy button gives tests an
+  -- observable restyle state for it (the real rows carry no backdrop).
+  local eb1 = N("RXPTargetFrame_EnemyButton1")
+  applyOpenXPLook(eb1, eb1 and eb1.label or nil)
+  local title = tf.title
+  if title then
+    if title.text then
+      title.text:SetFont("Fonts\\ARIALN.TTF", 11, "")
+      title.text:SetTextColor(0.62, 0.64, 0.70, 1)
+    end
+    if title.keyHint then
+      title.keyHint:SetFont("Fonts\\ARIALN.TTF", 10, "")
+      title.keyHint:SetTextColor(0.54, 0.56, 0.61, 1)
+    end
+  end
+  if type(tf.sections) == "table" then
+    for _, fs in pairs(tf.sections) do
+      fs:SetFont("Fonts\\ARIALN.TTF", 10, "")
+      fs:SetTextColor(0.54, 0.56, 0.61, 1)
+    end
+  end
+  for _, list in ipairs({ tf.enemyTargetButtons, tf.friendlyTargetButtons }) do
+    if type(list) == "table" then
+      for _, btn in ipairs(list) do
+        btn.hl:SetColorTexture(1, 1, 1, 0)
+        if btn.kind == "enemy" then
+          btn.bar:SetColorTexture(1, 112 / 255, 67 / 255, 1)
+        else
+          btn.bar:SetColorTexture(61 / 255, 187 / 255, 122 / 255, 1)
+        end
+        btn.key:SetFont("Fonts\\ARIALN.TTF", 10, "")
+        btn.key:SetTextColor(0.54, 0.56, 0.61, 1)
+        btn.label:SetFont("Fonts\\ARIALN.TTF", 12, "")
+        btn.label:SetTextColor(0.92, 0.93, 0.95, 1)
+      end
+    end
+  end
+end
+
 function HARNESS.ApplyOpenXPLook()
   applyOpenXPLook(N("OpenXPCard"), N("OpenXPCard").header.zone)
   -- Like OpenXP's own code (addon.arrowFrame), not a _G lookup: a test may
@@ -189,9 +296,7 @@ function HARNESS.ApplyOpenXPLook()
   applyOpenXPLook(af, af.text)
   -- The dial/text repaint card.ArrowUpdate does (once the card styled it).
   ArrowPaintOpenXP()
-  applyOpenXPLook(N("RXPTargetFrame"), N("RXPTargetFrame_title").text)
-  -- UpdateTargetFrame rebuilds the secure target rows, restyling them too.
-  applyOpenXPLook(N("RXPTargetFrame_EnemyButton1"), N("RXPTargetFrame_EnemyButton1").label)
+  HARNESS.ApplyTargetsOpenXPLook()
   applyOpenXPLook(N("RXPItemFrame"), N("RXPItemFrame_title").text)
   applyOpenXPLook(N("RXPLevelSplits"), N("RXPLevelSplits_title").text)
   applyOpenXPLook(N("OpenXPWelcomeFrame"))
@@ -236,23 +341,30 @@ addon.card = {
     bump("card.ApplyFonts")
     local function refont(fs, size)
       if not fs then return end
-      fs:SetFont("Fonts\\ARIALN.TTF", size, "OUTLINE")
+      fs:SetFont("Fonts\\ARIALN.TTF", size or 12, "OUTLINE")
       fs:SetShadowOffset(0, 0)
     end
     refont(N("OpenXPCard").header.zone, 12)
     refont(af.text, 12)
     refont(af.oxpDist, 17)
     refont(af.oxpLabel, 12)
-    refont(N("RXPTargetFrame_title").text, 12)
+    local t = N("RXPTargetFrame_title")
+    if t and t.text then refont(t.text, 12) end
   end,
 }
 
 addon.arrowFrame = af
 addon.targeting = {
   activeTargetFrame = tf,
-  UpdateTargetFrame = function() bump("targeting.UpdateTargetFrame"); HARNESS.ApplyOpenXPLook() end,
+  -- OpenXP itself bails out of combat for target-frame rebuilds
+  -- (Targeting.lua 1210): so does the fake.
+  UpdateTargetFrame = function()
+    bump("targeting.UpdateTargetFrame")
+    if InCombatLockdown() then return end
+    HARNESS.ApplyOpenXPLook()
+  end,
   RenderTargetFrameBackground = function() bump("targeting.RenderTargetFrameBackground")
-    applyOpenXPLook(N("RXPTargetFrame"))
+    HARNESS.ApplyTargetsOpenXPLook()
   end,
 }
 addon.tracker = {
