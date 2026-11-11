@@ -17,7 +17,10 @@
 --     could never durably win there.
 --   * Item upgrades: OpenXP's own Auction House tab continues Blizzard's
 --     AuctionFrameTab numbering and is told apart by OpenXP's isRXP flag;
---     Blizzard's tabs never get the flag and are never touched. The hidden
+--     Blizzard's tabs never get the flag and are never touched. Verify in
+--     game that the flag still marks OpenXP's tab: if it is absent the skin
+--     must skip the tab rather than guess by number (which could dress a
+--     Blizzard tab). The hidden
 --     comparison tooltip OpenXP builds for stat diffs gets the panel look;
 --     its text lines are re-styled by the tooltip machinery on every fill,
 --     so only the chrome is skinned.
