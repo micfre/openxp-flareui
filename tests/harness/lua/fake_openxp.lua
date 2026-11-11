@@ -108,10 +108,36 @@ targetButton(tf.friendlyTargetButtons, "RXPTargetFrame_FriendlyButton1",
 eb1:SetScript("OnClick", function() bump("RXPTargetFrame_EnemyButton1 click") end)
 
 -- Phase 2 windows -----------------------------------------------------------
+-- Active-item frame (ActiveItemFrame.lua 261-320): the frame, its title
+-- strip ("Active Items", V1 visuals give the strip its own legacy edge
+-- backdrop), the SECURE item buttons (SecureActionButtonTemplate, kept in
+-- itemFrame.buttonList) and the two hidden SECURE teleport buttons (382-394).
 local itemFrame = CreateFrame("Frame", "RXPItemFrame", UIParent, "BackdropTemplate")
-local itemTitle = CreateFrame("Frame", "RXPItemFrame_title", itemFrame)
+local itemTitle = CreateFrame("Frame", "RXPItemFrame_title", itemFrame, "BackdropTemplate")
 itemTitle.text = itemTitle:CreateFontString(nil, "OVERLAY")
+itemTitle.text:SetFont("Fonts\\ARIALN.TTF", 9, "")
+itemTitle.text:SetTextColor(0.62, 0.64, 0.70, 1)
 itemFrame.title = itemTitle
+itemFrame.buttonList = {}
+local function itemButton(i)
+  local btn = CreateFrame("Button", "RXPItemFrameButton" .. i, itemFrame,
+    "SecureActionButtonTemplate")
+  btn.__protected = true
+  btn:SetAttribute("type1", "item")
+  btn:SetAttribute("item", "item:19019")
+  btn:RegisterForClicks("AnyUp", "AnyDown")
+  btn.icon = btn:CreateTexture(nil, "BACKGROUND")
+  btn.icon:SetAllPoints(true)
+  btn.icon:SetTexture("Interface\\Icons\\INV_Misc_Gem_01")
+  itemFrame.buttonList[i] = btn
+  return btn
+end
+itemButton(1)
+itemButton(2)
+-- Hidden secure teleport buttons; like the quick-target buttons these are
+-- never given any visual treatment.
+CreateFrame("Button", "RXPTELEPORTTO", nil, "SecureActionButtonTemplate").__protected = true
+CreateFrame("Button", "RXPTELEPORTHOME", nil, "SecureActionButtonTemplate").__protected = true
 local splits = CreateFrame("Frame", "RXPLevelSplits", UIParent, "BackdropTemplate")
 local splitsTitle = CreateFrame("Frame", "RXPLevelSplits_title", splits)
 splitsTitle.text = splitsTitle:CreateFontString(nil, "OVERLAY")
@@ -207,7 +233,18 @@ function HARNESS.ApplyOpenXPLook()
   applyOpenXPLook(N("OpenXPCard"), N("OpenXPCard").header.zone)
   applyOpenXPLook(N("RXPG_ARROW"), N("RXPG_ARROW").text)
   HARNESS.ApplyTargetsOpenXPLook()
-  applyOpenXPLook(N("RXPItemFrame"), N("RXPItemFrame_title").text)
+  -- Active-item frame: V1 visuals backdrop the frame and its title strip
+  -- and re-font the title (ActiveItemFrame.lua 206-226). Nil-safe so tests
+  -- can simulate the frames going missing.
+  applyOpenXPLook(N("RXPItemFrame"))
+  local itemTitle = N("RXPItemFrame_title")
+  if itemTitle then
+    applyOpenXPLook(itemTitle, itemTitle.text)
+    if itemTitle.text then
+      itemTitle.text:SetFont("Fonts\\ARIALN.TTF", 9, "")
+      itemTitle.text:SetTextColor(0.62, 0.64, 0.70, 1)
+    end
+  end
   applyOpenXPLook(N("RXPLevelSplits"), N("RXPLevelSplits_title").text)
   applyOpenXPLook(N("OpenXPWelcomeFrame"))
   applyOpenXPLook(N("OpenXPFeedbackFrame"))

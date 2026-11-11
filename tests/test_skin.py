@@ -789,5 +789,45 @@ class QuestTargets(unittest.TestCase):
                              f"{f}:{m} was called by the skin")
 
 
+class ActiveItems(unittest.TestCase):
+    """Ticket #8 (story 16): the shipped active-item frame skin, observed
+    through the skin seam like the Quest Targets skin above."""
+
+    def test_frame_title_strip_and_title_get_flareui_look_after_login(self):
+        env = Env()
+        env.boot()
+        # Frame: FlareUI backdrop like the guide card / Quest Targets.
+        self.assertEqual(env.run("return RXPItemFrame.backdrop.edgeFile"), FLAREUI_EDGE)
+        self.assertEqual(env.run("return RXPItemFrame.backdrop.edgeSize"), 16)
+        self.assertEqual(env.run(
+            "local r,g,b,a = RXPItemFrame:GetBackdropBorderColor(); return r,g,b,a"),
+            (0.65, 0.49, 0.27, 1.0))
+        self.assertEqual(env.run(
+            "local r,g,b,a = RXPItemFrame:GetBackdropColor(); return r,g,b,a"),
+            (1.0, 1.0, 1.0, 0.6))
+        # Title strip: a FlareUI header band sits on the panel fill, so
+        # OpenXP's own edge backdrop on the strip is replaced by the warm
+        # fill without a border of its own.
+        self.assertIsNone(env.run("return RXPItemFrame_title.backdrop.edgeFile"))
+        self.assertEqual(env.run("return RXPItemFrame_title.backdrop.bgFile"),
+                         "Interface\\DialogFrame\\UI-DialogBox-Background-Dark")
+        self.assertEqual(env.run(
+            "local r,g,b,a = RXPItemFrame_title:GetBackdropColor(); return r,g,b,a"),
+            (1.0, 1.0, 1.0, 0.6))
+        # "Active Items" in gold header typography with the 1px shadow.
+        self.assertEqual(env.run(
+            "local p,s,f = RXPItemFrame_title.text:GetFont(); return p,s,f"),
+            (FRIZQ, 13, ""))
+        self.assertEqual(env.run(
+            "local r,g,b,a = RXPItemFrame_title.text:GetTextColor(); return r,g,b,a"),
+            (1.0, 0.82, 0.0, 1.0))
+        self.assertEqual(env.run(
+            "local x,y = RXPItemFrame_title.text:GetShadowOffset(); return x,y"), (1, -1))
+        self.assertEqual(env.run(
+            "local r,g,b,a = RXPItemFrame_title.text:GetShadowColor(); return r,g,b,a"),
+            (0.0, 0.0, 0.0, 1.0))
+        self.assertEqual(env.chat(), [])
+
+
 if __name__ == "__main__":
     unittest.main()
