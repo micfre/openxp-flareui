@@ -272,6 +272,15 @@ local texExtra = {
     record(self, "SetVertexColor", r, g, b, a)
     self.__vertexColor = { r, g, b, a }
   end,
+  GetVertexColor = function(self)
+    local c = self.__vertexColor or { 1, 1, 1, 1 }
+    return c[1], c[2], c[3], c[4]
+  end,
+  SetDesaturated = function(self, flag)
+    record(self, "SetDesaturated", flag)
+    self.__desaturated = flag and true or false
+  end,
+  GetDesaturated = function(self) return self.__desaturated == true end,
   SetGradient = function(self, orientation, top, bottom)
     record(self, "SetGradient", orientation, top, bottom)
     self.__gradient = { orientation, top, bottom }
