@@ -828,6 +828,136 @@ class ActiveItems(unittest.TestCase):
             (0.0, 0.0, 0.0, 1.0))
         self.assertEqual(env.chat(), [])
 
+    # -- helpers -----------------------------------------------------------
+
+    def assert_flareui_look(self, env):
+        self.assertEqual(env.run("return RXPItemFrame.backdrop.edgeFile"), FLAREUI_EDGE)
+        self.assertIsNone(env.run("return RXPItemFrame_title.backdrop.edgeFile"))
+        self.assertEqual(env.run(
+            "local p,s,f = RXPItemFrame_title.text:GetFont(); return p,s,f"),
+            (FRIZQ, 13, ""))
+        self.assertEqual(env.run(
+            "local r,g,b,a = RXPItemFrame_title.text:GetTextColor(); return r,g,b,a"),
+            (1.0, 0.82, 0.0, 1.0))
+
+    def assert_openxp_look(self, env):
+        self.assertEqual(env.run("return RXPItemFrame.backdrop.edgeFile"), OPENXP_EDGE)
+        self.assertEqual(env.run("return RXPItemFrame_title.backdrop.edgeFile"), OPENXP_EDGE)
+        self.assertEqual(env.run(
+            "local p,s,f = RXPItemFrame_title.text:GetFont(); return p,s,f"),
+            ("Fonts\\ARIALN.TTF", 9, ""))
+
+    # -- re-apply after OpenXP refreshes (stories 22-23) --------------------
+
+    def test_skin_wins_after_every_openxp_refresh_of_the_item_frame(self):
+        refreshes = [
+            "HARNESS.openxp:RenderFrame()",
+            "HARNESS.openxp:ReloadTheme()",
+            "HARNESS.openxp.activeItemFrame.UpdateVisuals()",
+            "HARNESS.openxp.card.SkinPanels()",
+        ]
+        for call in refreshes:
+            with self.subTest(call=call):
+                env = Env()
+                env.boot()
+                env.run(call)
+                self.assert_flareui_look(env)
+                self.assertEqual(env.chat(), [])
+
+    # -- switches (stories 24-25) -------------------------------------------
+
+    def test_per_window_switch_off_leaves_the_item_frame_untouched(self):
+        env = Env(db={"windows": {"activeitems": False}})
+        env.boot()
+        env.run("HARNESS.openxp.activeItemFrame.UpdateVisuals()")
+        self.assert_openxp_look(env)
+        env.slash("/oxpfui debug")
+        self.assertIn("window 'activeitems' is switched off", "\n".join(env.chat()))
+
+    def test_master_switch_off_leaves_the_item_frame_untouched(self):
+        env = Env(db={"enabled": False})
+        env.boot()
+        env.run("HARNESS.openxp:RenderFrame()")
+        env.run("HARNESS.openxp.activeItemFrame.UpdateVisuals()")
+        self.assert_openxp_look(env)
+        self.assertEqual(env.chat(), [])
+
+    # -- robustness (stories 31-32) -----------------------------------------
+
+    def test_missing_frames_are_skipped_quietly_without_errors(self):
+        env = Env()
+        env.run("""
+          _G.RXPItemFrameButton1 = nil
+          _G.RXPItemFrameButton2 = nil
+          _G.RXPItemFrame_title = nil
+          _G.RXPItemFrame = nil
+          HARNESS.openxp.activeItemFrame = nil
+        """)
+        env.boot()
+        env.run("HARNESS.openxp:RenderFrame()")
+        self.assertEqual(env.chat(), [])
+        env.slash("/oxpfui debug")
+        report = "\n".join(env.chat())
+        self.assertIn("missing frame RXPItemFrame", report)
+        self.assertIn("Errors: none", report)
+
+    def test_missing_title_text_is_skipped_quietly(self):
+        env = Env()
+        env.run("_G.RXPItemFrame_title.text = nil")
+        env.boot()
+        self.assertEqual(env.chat(), [])
+        # What exists is still skinned; the missing text is skipped.
+        self.assertEqual(env.run("return RXPItemFrame.backdrop.edgeFile"), FLAREUI_EDGE)
+        self.assertIsNone(env.run("return RXPItemFrame_title.backdrop.edgeFile"))
+        env.slash("/oxpfui debug")
+        self.assertIn("Errors: none", "\n".join(env.chat()))
+
+    # -- secure frames stay functional (stories 12, 30) ----------------------
+
+    def test_item_buttons_and_teleport_buttons_are_never_restyled(self):
+        env = Env()
+        secure = ("RXPItemFrameButton1", "RXPItemFrameButton2",
+                  "RXPTELEPORTTO", "RXPTELEPORTHOME")
+        visual = ("SetBackdrop", "SetBackdropColor", "SetBackdropBorderColor",
+                  "SetFont", "SetTextColor", "SetTexture", "SetColorTexture",
+                  "SetVertexColor", "SetNormalTexture")
+        before = {(f, m): env.calls_made_on(f, m) for f in secure for m in visual}
+        env.boot()
+        env.run("HARNESS.openxp:RenderFrame()")
+        env.run("HARNESS.openxp.activeItemFrame.UpdateVisuals()")
+        for (f, m), count in before.items():
+            self.assertEqual(env.calls_made_on(f, m), count, f"{f}:{m} was called")
+        # Icons, attributes and click registration are exactly OpenXP's own.
+        self.assertEqual(env.run("return RXPItemFrameButton1.icon.__texture"),
+                         "Interface\\Icons\\INV_Misc_Gem_01")
+        self.assertEqual(env.run("return RXPItemFrameButton1:GetAttribute('type1')"),
+                         "item")
+        self.assertEqual(env.run("return RXPItemFrameButton2:GetAttribute('item')"),
+                         "item:19019")
+
+    def test_frame_is_skinned_in_combat_since_no_secure_frame_is_touched(self):
+        env = Env()
+        env.set_combat(True)
+        env.boot()
+        # The skin touches no secure frame, so nothing is deferred.
+        self.assert_flareui_look(env)
+
+    # -- appearance only (story 29) -----------------------------------------
+
+    def test_no_position_or_size_is_ever_changed(self):
+        env = Env()
+        layout = ("SetPoint", "SetSize", "SetWidth", "SetHeight", "SetScale",
+                  "SetAllPoints", "ClearAllPoints")
+        family = ("RXPItemFrame", "RXPItemFrame_title", "RXPItemFrameButton1",
+                  "RXPItemFrameButton2", "RXPTELEPORTTO", "RXPTELEPORTHOME")
+        before = {(f, m): env.calls_made_on(f, m) for f in family for m in layout}
+        env.boot()
+        env.run("HARNESS.openxp:RenderFrame()")
+        env.run("HARNESS.openxp.activeItemFrame.UpdateVisuals()")
+        for (f, m), count in before.items():
+            self.assertEqual(env.calls_made_on(f, m), count,
+                             f"{f}:{m} was called by the skin")
+
 
 if __name__ == "__main__":
     unittest.main()
