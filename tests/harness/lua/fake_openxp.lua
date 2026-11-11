@@ -214,6 +214,15 @@ mini.expand = MakeBarButton(mini)
 local LIST_ROWS = 6
 local list = nil
 
+-- Test-only observation handles for the card's unnamed children (skins
+-- must find them by walking; tests read state through these).
+HARNESS.cardBits = {
+  header = header, bar = bar, upNext = upNext, mini = mini,
+  blocks = blocks, hist = hist, xpStrip = xpStrip, progress = progress,
+  list = nil, -- set by card.BuildStepList
+}
+local cardBits = HARNESS.cardBits
+
 function card.BuildStepList()
   if list then return list end
   list = CreateFrame("Frame", nil, card, "BackdropTemplate")
@@ -233,6 +242,7 @@ function card.BuildStepList()
   list:SetHeight(28 + LIST_ROWS * 18 + 8)
   list:EnableMouseWheel(true)
   list:Hide()
+  cardBits.list = list
   return list
 end
 
@@ -488,6 +498,7 @@ addon.card = {
 
 -- The card's CurrentStep() reads this off the addon table.
 function addon.GetGuideProgress() return 4 end
+addon.currentGuide = { name = "Fake Guide", displayname = "Fake Guide 1-10", steps = {} }
 
 addon.arrowFrame = af
 addon.targeting = {

@@ -73,6 +73,21 @@ local function baseMethods(kind)
       end
       return n
     end,
+    -- Real API: returns textures and fontstrings (never child frames).
+    GetRegions = function(self)
+      local out = {}
+      for _, c in ipairs(self.__children) do
+        if c.__kind ~= "Frame" then out[#out + 1] = c end
+      end
+      return table.unpack(out)
+    end,
+    GetNumRegions = function(self)
+      local n = 0
+      for _, c in ipairs(self.__children) do
+        if c.__kind ~= "Frame" then n = n + 1 end
+      end
+      return n
+    end,
 
     Show = function(self) record(self, "Show"); self.__shown = true end,
     Hide = function(self) record(self, "Hide"); self.__shown = false end,
