@@ -14,7 +14,6 @@ local L = {
   borderLabel = "Border style",
   opacityLabel = "Panel opacity",
   opacityValue = "%d%%",
-  closeButton = "Close",
   versionNote = "OpenXP %s was found; this release was tested with %s — something may look off.",
   -- Per-window switch labels (keys = OXPFUI.WINDOWS entries).
   windows = {
