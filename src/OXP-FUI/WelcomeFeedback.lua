@@ -23,16 +23,11 @@ local theme = OXPFUI.theme
 -- OpenXP child walking (both windows keep almost every child unnamed)
 -- ---------------------------------------------------------------------------
 
--- The real API returns GetChildren/GetRegions as a vararg while the test
--- stub returns a table; normalize both into a list.
+-- GetChildren/GetRegions return their items as a vararg; collect into a
+-- list for ipairs.
 local function CallList(obj, method)
   if type(obj) ~= "table" or type(obj[method]) ~= "function" then return {} end
-  local packed = { obj[method](obj) }
-  local first = packed[1]
-  if #packed == 1 and type(first) == "table" and first[1] ~= nil then
-    return first
-  end
-  return packed
+  return { obj[method](obj) }
 end
 
 local function IsType(obj, objectType)
