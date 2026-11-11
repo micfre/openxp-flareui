@@ -16,7 +16,9 @@ ADDON_DIR = REPO_ROOT / "src" / "OXP-FUI"
 LUA_DIR = pathlib.Path(__file__).resolve().parent / "lua"
 
 # TOC order; kept in sync with src/OXP-FUI/OXP-FUI.toc (build test enforces).
-ADDON_FILES = ["Core.lua", "Locale.lua", "Theme.lua", "Engine.lua", "Card.lua",
+# TOC order; kept in sync with src/OXP-FUI/OXP-FUI.toc (build test enforces).
+ADDON_FILES = ["Core.lua", "Locale.lua", "Theme.lua", "Engine.lua",
+               "ArrowSkin.lua", "Card.lua", "SkinTargets.lua",
                "SettingsPanel.lua"]
 
 

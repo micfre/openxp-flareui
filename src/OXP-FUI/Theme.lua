@@ -22,6 +22,9 @@ theme.C = {
   BOX = { 0.50, 0.38, 0.21 },       -- bronze square buttons at rest
   BOX_LIT = { 0.65, 0.49, 0.27 },   -- bronze square buttons hovered
   BORDER = { 0.65, 0.49, 0.27, 1 }, -- #A67D45 frame border tint
+  FILL = { 0.10, 0.08, 0.06 },      -- warm near-black: solid form of the
+                                     -- tracker fill's lighter top colour,
+                                     -- used where a plain texture is tinted
 }
 
 -- Typography: header 13 / title 12 / body 11, no outline, 1px black shadow.
@@ -225,6 +228,26 @@ function theme.ApplyBoxButtonPaint(button, opts)
     rf:HookScript("OnLeave", function() paint(false) end)
   end
   chrome.paint(false)
+end
+
+-- Sub-panel inset: the warm dark fill at a slightly firmer opacity than the
+-- window (OpenXP's own sub-panels are a step lighter than their windows),
+-- with a bronze hairline instead of border art — the window already wears
+-- the border art.
+function theme.ApplyInsetBackdrop(frame)
+  local db = OXPFUI.db or {}
+  local opacity = db.opacity
+  if type(opacity) ~= "number" then opacity = 0.6 end
+  frame:SetBackdrop({
+    bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background-Dark",
+    edgeFile = "Interface\\Buttons\\WHITE8X8",
+    tile = false, tileSize = 0, edgeSize = 1,
+    insets = { left = 1, right = 1, top = 1, bottom = 1 },
+  })
+  frame:SetBackdropColor(1, 1, 1, math.min(1, opacity + 0.25))
+  local c = theme.C.BOX
+  frame:SetBackdropBorderColor(c[1], c[2], c[3], 1)
+  return frame
 end
 
 OXPFUI.theme = theme

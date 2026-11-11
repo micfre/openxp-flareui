@@ -522,5 +522,272 @@ class SettingsPanel(unittest.TestCase):
                          env.run("return OXPFUI.L.reloadNote"))
 
 
+FLAREUI_EDGE = "Interface\\AddOns\\OXP-FUI\\Media\\Borders\\FlareUI-Frames.tga"
+OPENXP_EDGE = "Interface\\Buttons\\WHITE8X8"
+FRIZQ = "Fonts\\FRIZQT__.TTF"
+
+# The whole Quest Targets family (spec story 11): the frame, its title strip,
+# the section labels and the secure target rows.
+TARGET_ROWS = ("RXPTargetFrame_EnemyButton1", "RXPTargetFrame_EnemyButton2",
+               "RXPTargetFrame_FriendlyButton1")
+
+
+class QuestTargets(unittest.TestCase):
+    """Ticket #5 (stories 11-12): the shipped Quest Targets skin, observed
+    only through the skin seam — boot the real addon files against the fake
+    OpenXP and read frame state back."""
+
+    def test_frame_title_and_rows_get_flareui_look_after_login(self):
+        env = Env()
+        env.boot()
+        # Frame: FlareUI backdrop like the guide card.
+        self.assertEqual(env.run("return RXPTargetFrame.backdrop.edgeFile"), FLAREUI_EDGE)
+        self.assertEqual(env.run("return RXPTargetFrame.backdrop.edgeSize"), 16)
+        self.assertEqual(env.run(
+            "local r,g,b,a = RXPTargetFrame:GetBackdropBorderColor(); return r,g,b,a"),
+            (0.65, 0.49, 0.27, 1.0))
+        self.assertEqual(env.run(
+            "local r,g,b,a = RXPTargetFrame:GetBackdropColor(); return r,g,b,a"),
+            (1.0, 1.0, 1.0, 0.6))
+        # Title: FlareUI header typography, gold, 1px black shadow.
+        self.assertEqual(env.run(
+            "local p,s,f = RXPTargetFrame_title.text:GetFont(); return p,s,f"),
+            (FRIZQ, 13, ""))
+        self.assertEqual(env.run(
+            "local r,g,b,a = RXPTargetFrame_title.text:GetTextColor(); return r,g,b,a"),
+            (1.0, 0.82, 0.0, 1.0))
+        self.assertEqual(env.run(
+            "local x,y = RXPTargetFrame_title.text:GetShadowOffset(); return x,y"), (1, -1))
+        self.assertEqual(env.run(
+            "local r,g,b,a = RXPTargetFrame_title.text:GetShadowColor(); return r,g,b,a"),
+            (0.0, 0.0, 0.0, 1.0))
+        # Key hint ("nearest T"): body text, dim grey.
+        self.assertEqual(env.run(
+            "local p,s,f = RXPTargetFrame_title.keyHint:GetFont(); return p,s,f"),
+            (FRIZQ, 11, ""))
+        self.assertEqual(env.run(
+            "local r,g,b,a = RXPTargetFrame_title.keyHint:GetTextColor(); return r,g,b,a"),
+            (0.55, 0.55, 0.55, 1.0))
+        # Section labels ("KILL" / "TALK TO"): FlareUI zone bronze, title size.
+        for key in ("enemy", "friendly"):
+            self.assertEqual(env.run(
+                f"local p,s,f = RXPTargetFrame.sections[{key!r}]:GetFont(); return p,s,f"),
+                (FRIZQ, 12, ""), f"section {key} font")
+            self.assertEqual(env.run(
+                f"local r,g,b,a = RXPTargetFrame.sections[{key!r}]:GetTextColor(); return r,g,b,a"),
+                (0.80, 0.60, 0.34, 1.0), f"section {key} colour")
+        # Rows: name in light grey body text, keybind hint dim, bronze strip.
+        for row in TARGET_ROWS:
+            self.assertEqual(env.run(
+                f"local p,s,f = _G[{row!r}].label:GetFont(); return p,s,f"),
+                (FRIZQ, 11, ""), f"{row} label font")
+            self.assertEqual(env.run(
+                f"local r,g,b,a = _G[{row!r}].label:GetTextColor(); return r,g,b,a"),
+                (0.85, 0.85, 0.85, 1.0), f"{row} label colour")
+            self.assertEqual(env.run(
+                f"local p,s,f = _G[{row!r}].key:GetFont(); return p,s,f"),
+                (FRIZQ, 11, ""), f"{row} key font")
+            self.assertEqual(env.run(
+                f"local r,g,b,a = _G[{row!r}].key:GetTextColor(); return r,g,b,a"),
+                (0.55, 0.55, 0.55, 1.0), f"{row} key colour")
+            self.assertEqual(env.run(
+                f"local c = _G[{row!r}].bar.__colorTexture; return c[1],c[2],c[3],c[4]"),
+                (0.80, 0.60, 0.34, 1.0), f"{row} class strip not bronze")
+        # Quiet: no chat output from any of this.
+        self.assertEqual(env.chat(), [])
+
+
+    # -- helpers -----------------------------------------------------------
+
+    def assert_flareui_look(self, env):
+        """The visible identity of the skin, on frame + title + one row of
+        each kind (enemy rows sit behind the friendly rows' section)."""
+        self.assertEqual(env.run("return RXPTargetFrame.backdrop.edgeFile"), FLAREUI_EDGE)
+        self.assertEqual(env.run(
+            "local p,s,f = RXPTargetFrame_title.text:GetFont(); return p,s,f"),
+            (FRIZQ, 13, ""))
+        self.assertEqual(env.run(
+            "local r,g,b,a = RXPTargetFrame_title.text:GetTextColor(); return r,g,b,a"),
+            (1.0, 0.82, 0.0, 1.0))
+        for row in ("RXPTargetFrame_EnemyButton2", "RXPTargetFrame_FriendlyButton1"):
+            self.assertEqual(env.run(
+                f"local p,s,f = _G[{row!r}].label:GetFont(); return p,s,f"),
+                (FRIZQ, 11, ""), f"{row} label")
+            self.assertEqual(env.run(
+                f"local c = _G[{row!r}].bar.__colorTexture; return c[1],c[2],c[3]"),
+                (0.80, 0.60, 0.34), f"{row} strip")
+
+    def assert_openxp_look(self, env):
+        """OpenXP's own look kept (nothing skinned)."""
+        self.assertEqual(env.run("return RXPTargetFrame.backdrop.edgeFile"), OPENXP_EDGE)
+        self.assertEqual(env.run(
+            "local p,s,f = RXPTargetFrame_title.text:GetFont(); return p,s,f"),
+            ("Fonts\\ARIALN.TTF", 11, ""))
+        self.assertEqual(env.run(
+            "local c = RXPTargetFrame_EnemyButton1.bar.__colorTexture; return c[1],c[2],c[3]"),
+            (1.0, 112 / 255, 67 / 255))
+        self.assertEqual(env.run(
+            "local p,s,f = RXPTargetFrame_FriendlyButton1.label:GetFont(); return p,s,f"),
+            ("Fonts\\ARIALN.TTF", 12, ""))
+
+    # -- re-apply after OpenXP refreshes (story 22-23) ----------------------
+
+    def test_skin_wins_after_every_openxp_refresh_of_the_target_frame(self):
+        refreshes = [
+            "HARNESS.openxp:RenderFrame()",
+            "HARNESS.openxp:ReloadTheme()",
+            "HARNESS.openxp.card.SkinPanels()",
+            "HARNESS.openxp.card.ApplyFonts()",
+            "HARNESS.openxp.targeting:UpdateTargetFrame()",
+            "HARNESS.openxp.targeting:RenderTargetFrameBackground()",
+        ]
+        for call in refreshes:
+            with self.subTest(call=call):
+                env = Env()
+                env.boot()
+                env.run(call)
+                self.assert_flareui_look(env)
+                self.assertEqual(env.chat(), [])
+
+    # -- combat deferral (stories 12, 30) -----------------------------------
+
+    def test_request_during_combat_defers_until_combat_ends(self):
+        env = Env()
+        env.set_combat(True)
+        env.boot()
+        # While in combat nothing changed: the whole family keeps OpenXP's
+        # look (secure rows included).
+        self.assert_openxp_look(env)
+        self.assertEqual(env.run("return RXPTargetFrame_EnemyButton1.backdrop.edgeFile"),
+                         OPENXP_EDGE)
+        env.slash("/oxpfui debug")
+        self.assertIn("in combat", "\n".join(env.chat()))
+        # Combat ends: the deferred pass applies.
+        env.set_combat(False)
+        env.fire("PLAYER_REGEN_ENABLED")
+        self.assert_flareui_look(env)
+
+    def test_no_call_is_made_on_any_targets_frame_while_in_combat(self):
+        env = Env()
+        family = ("RXPTargetFrame", "RXPTargetFrame_title",
+                  "RXPTargetFrame_EnemyButton1", "RXPTargetFrame_EnemyButton2",
+                  "RXPTargetFrame_FriendlyButton1",
+                  "OpenXPTargetMobs", "OpenXPTargetNPCs")
+        # Baseline: everything the fake OpenXP itself did while building.
+        before = {f: env.calls_made_on(f) for f in family}
+        env.set_combat(True)
+        env.boot()
+        env.run("HARNESS.openxp.targeting:UpdateTargetFrame()")  # OpenXP bails too
+        for f in family:
+            self.assertEqual(env.calls_made_on(f), before[f],
+                             f"{f} was touched while in combat")
+
+    # -- targeting never blocked (story 12) ---------------------------------
+
+    def test_targeting_handlers_still_work_and_secure_setup_is_untouched(self):
+        env = Env()
+        env.boot()
+        # The click still reaches OpenXP's handler (the fake's stand-in for
+        # the secure macro template running /targetexact).
+        self.assertEqual(env.openxp_calls("RXPTargetFrame_EnemyButton1 click"), 0)
+        env.run("RXPTargetFrame_EnemyButton1:Click()")
+        self.assertEqual(env.openxp_calls("RXPTargetFrame_EnemyButton1 click"), 1)
+        # Attributes, scripts and click registrations are exactly what the
+        # fake OpenXP set up — the skin never touched them.
+        self.assertEqual(env.run("return RXPTargetFrame_EnemyButton1:GetAttribute('type')"),
+                         "macro")
+        self.assertEqual(env.run("return RXPTargetFrame_EnemyButton1:GetAttribute('macrotext')"),
+                         "/targetexact Forest Lurker")
+        self.assertEqual(env.calls_made_on("RXPTargetFrame_EnemyButton1", "SetAttribute"), 2)
+        self.assertEqual(env.calls_made_on("RXPTargetFrame_EnemyButton1", "SetScript"), 1)
+        self.assertEqual(env.calls_made_on("RXPTargetFrame_EnemyButton1", "RegisterForClicks"), 1)
+        # The hidden keybound quick-target buttons are never styled at all.
+        for f in ("OpenXPTargetMobs", "OpenXPTargetNPCs"):
+            for method in ("SetBackdrop", "SetBackdropColor", "SetBackdropBorderColor",
+                           "SetFont", "SetTextColor", "SetTexture", "SetColorTexture"):
+                self.assertEqual(env.calls_made_on(f, method), 0,
+                                 f"{f}:{method} was called")
+
+    # -- switches (stories 24-25) -------------------------------------------
+
+    def test_per_window_switch_off_leaves_the_targets_family_untouched(self):
+        env = Env(db={"windows": {"targets": False}})
+        env.boot()
+        env.run("HARNESS.openxp:RenderFrame()")
+        self.assert_openxp_look(env)
+        env.slash("/oxpfui debug")
+        self.assertIn("window 'targets' is switched off", "\n".join(env.chat()))
+
+    def test_master_switch_off_leaves_the_targets_family_untouched(self):
+        env = Env(db={"enabled": False})
+        env.boot()
+        env.run("HARNESS.openxp:RenderFrame()")
+        env.run("HARNESS.openxp.targeting:UpdateTargetFrame()")
+        self.assert_openxp_look(env)
+        self.assertEqual(env.chat(), [])
+
+    # -- robustness (stories 31-32) -----------------------------------------
+
+    def test_missing_frames_are_skipped_quietly_without_errors(self):
+        # A future OpenXP rename removes the whole feature.
+        env = Env()
+        env.run("""
+          _G.RXPTargetFrame_EnemyButton1 = nil
+          _G.RXPTargetFrame_EnemyButton2 = nil
+          _G.RXPTargetFrame_FriendlyButton1 = nil
+          _G.RXPTargetFrame_title = nil
+          _G.RXPTargetFrame = nil
+          HARNESS.openxp.targeting.activeTargetFrame = nil
+        """)
+        env.boot()
+        env.run("HARNESS.openxp:RenderFrame()")  # refresh paths stay safe too
+        self.assertEqual(env.chat(), [])
+        env.slash("/oxpfui debug")
+        report = "\n".join(env.chat())
+        self.assertIn("missing frame RXPTargetFrame", report)
+        self.assertIn("Errors: none", report)
+
+    def test_missing_fields_and_lists_are_skipped_quietly(self):
+        # A partial drift: the frame stays, its internals are gone/renamed.
+        env = Env()
+        env.run("""
+          local tf = _G.RXPTargetFrame
+          tf.title.text = nil
+          tf.title.keyHint = nil
+          tf.sections = nil
+          tf.enemyTargetButtons = {}
+          tf.friendlyTargetButtons = {}
+        """)
+        env.boot()
+        self.assertEqual(env.chat(), [])
+        # What exists is still skinned (the frame itself), what is gone is
+        # skipped, and the orphaned row buttons keep OpenXP's look.
+        self.assertEqual(env.run("return RXPTargetFrame.backdrop.edgeFile"), FLAREUI_EDGE)
+        self.assertEqual(env.run(
+            "local p,s,f = RXPTargetFrame_EnemyButton1.label:GetFont(); return p,s,f"),
+            ("Fonts\\ARIALN.TTF", 12, ""))
+        env.slash("/oxpfui debug")
+        self.assertIn("Errors: none", "\n".join(env.chat()))
+
+    # -- appearance only (story 29) -----------------------------------------
+
+    def test_no_position_or_size_is_ever_changed(self):
+        env = Env()
+        layout = ("SetPoint", "SetSize", "SetWidth", "SetHeight", "SetScale",
+                  "SetAllPoints", "ClearAllPoints")
+        family = ("RXPTargetFrame", "RXPTargetFrame_title",
+                  "RXPTargetFrame_EnemyButton1", "RXPTargetFrame_EnemyButton2",
+                  "RXPTargetFrame_FriendlyButton1",
+                  "OpenXPTargetMobs", "OpenXPTargetNPCs")
+        before = {(f, m): env.calls_made_on(f, m) for f in family for m in layout}
+        env.boot()
+        env.run("HARNESS.openxp:RenderFrame()")
+        env.run("HARNESS.openxp.targeting:UpdateTargetFrame()")
+        env.run("HARNESS.openxp.targeting:RenderTargetFrameBackground()")
+        for (f, m), count in before.items():
+            self.assertEqual(env.calls_made_on(f, m), count,
+                             f"{f}:{m} was called by the skin")
+
+
 if __name__ == "__main__":
     unittest.main()

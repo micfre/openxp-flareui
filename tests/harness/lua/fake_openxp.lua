@@ -299,19 +299,167 @@ function card.ToggleStepList()
 end
 
 -- Waypoint arrow (phase 1) --------------------------------------------------
+-- Mirrors map.lua plus the card's arrow code (OpenXPCard.lua): StyleArrow
+-- creates the dial textures and the dist/label font strings once; the
+-- OnUpdate handler (card's ArrowUpdate) then repaints the ring tint and
+-- the distance text colour EVERY FRAME, following the arrived state. A
+-- skin under test must therefore win not only over the refresh calls but
+-- also over that per-frame repaint.
 local af = CreateFrame("Frame", "RXPG_ARROW", UIParent)
 af.texture = af:CreateTexture(nil, "ARTWORK")
 af.text = af:CreateFontString(nil, "OVERLAY")
 
+local OXP_TEX = "Interface\\AddOns\\OpenXP\\Textures\\Card\\"
+-- The slice of OpenXPCard.lua's local C table the arrow repaint uses.
+local OXP_C = {
+  blue = { 90 / 255, 184 / 255, 1 },
+  green = { 61 / 255, 187 / 255, 122 / 255 },
+}
+local function OXPTint(tex, color, alpha)
+  tex:SetVertexColor(color[1], color[2], color[3], alpha or color[4] or 1)
+end
+
+-- Arrow state DrawArrow would maintain (map.lua); tests drive it directly.
+af.distance = 100
+af.element = { title = "Kill: Forest Wolf Pack" }
+
+-- map.lua drag handlers: OpenXP behaviour OXP-FUI must leave untouched.
+af:SetMovable(true)
+af:EnableMouse(1)
+af:SetScript("OnMouseDown", function(self)
+  local a = HARNESS.openxp
+  if a and not a.settings.profile.lockFrames and self:GetAlpha() ~= 0 then
+    self:StartMoving()
+  end
+end)
+af:SetScript("OnMouseUp", function(self)
+  self:StopMovingOrSizing()
+end)
+
+-- card.StyleArrow (OpenXPCard.lua:2196): dial + text, created once.
+local function StyleArrow()
+  if af.openxpStyled then return end
+  af.openxpStyled = true
+  af.dialBg = af:CreateTexture(nil, "BACKGROUND")
+  af.dialBg:SetTexture(OXP_TEX .. "dialdisc")
+  af.dialBg:SetVertexColor(16 / 255, 17 / 255, 21 / 255, 0.85)
+  af.dialRing = af:CreateTexture(nil, "BORDER")
+  af.dialRing:SetTexture(OXP_TEX .. "dialring")
+  af.arrived = af:CreateTexture(nil, "OVERLAY")
+  af.arrived:SetTexture(OXP_TEX .. "check")
+  OXPTint(af.arrived, OXP_C.green)
+  af.arrived:Hide()
+  af.text:SetAlpha(0)
+  af.oxpDist = af:CreateFontString(nil, "OVERLAY")
+  af.oxpDist:SetFont("Fonts\\ARIALN.TTF", 17, "OUTLINE")
+  af.oxpLabel = af:CreateFontString(nil, "OVERLAY")
+  af.oxpLabel:SetFont("Fonts\\ARIALN.TTF", 12, "OUTLINE")
+  af.oxpLabel:SetTextColor(0.72, 0.74, 0.8, 1)
+end
+
+-- The colour/text half of card.ArrowUpdate (OpenXPCard.lua:2261-2288):
+-- OpenXP's own per-frame repaint, following the arrived state. Reused by
+-- HARNESS.ApplyOpenXPLook so refresh calls reset the dial to OpenXP's look.
+local function ArrowPaintOpenXP()
+  if not af.oxpDist then return end
+  local dist = af.distance or 0
+  local element = af.oxpVia or af.element
+  local here = element and dist <= 8
+  if here then
+    af.texture:Hide()
+    af.arrived:Show()
+    OXPTint(af.dialRing, OXP_C.green)
+    af.oxpDist:SetText("Here")
+    af.oxpDist:SetTextColor(OXP_C.green[1], OXP_C.green[2], OXP_C.green[3], 1)
+  else
+    af.texture:Show()
+    af.arrived:Hide()
+    OXPTint(af.dialRing, OXP_C.blue, 0.6)
+    af.oxpDist:SetText(string.format("%d yd", dist))
+    af.oxpDist:SetTextColor(0.96, 0.97, 0.98, 1)
+  end
+  af.oxpLabel:SetText(element and element.title or "")
+end
+
+-- The OnUpdate handler OpenXP installs on the arrow frame (card.TimedArrow).
+local function ArrowUpdate(self)
+  bump("ArrowUpdate")
+  local a = HARNESS.openxp
+  if a and a.DrawArrow then a.DrawArrow(self) end
+  ArrowPaintOpenXP()
+end
+
 -- Quest Targets (phase 1) ---------------------------------------------------
+-- Mirrors Targeting.lua: the frame, its title strip ("QUEST TARGETS" + a
+-- keybind hint), the "KILL"/"TALK TO" section labels and the SECURE target
+-- rows (SecureActionButtonTemplate macro buttons) with their RowifyTargets
+-- internals: hl highlight, 2px class strip (bar), iconHolder + icon, key and
+-- label font strings. Buttons are created on demand in the real addon and
+-- kept in targetFrame.enemyTargetButtons / .friendlyTargetButtons.
 local tf = CreateFrame("Frame", "RXPTargetFrame", UIParent, "BackdropTemplate")
 local tfTitle = CreateFrame("Frame", "RXPTargetFrame_title", tf)
 tfTitle.text = tfTitle:CreateFontString(nil, "OVERLAY")
 tf.title = tfTitle
--- A secure enemy button (SecureActionButtonTemplate in the real addon).
-local eb = CreateFrame("Button", "RXPTargetFrame_EnemyButton1", tf, "SecureActionButtonTemplate")
-eb.__protected = true
-eb.label = eb:CreateFontString(nil, "OVERLAY")
+tfTitle.keyHint = tfTitle:CreateFontString(nil, "OVERLAY")
+tfTitle.keyHint:SetFont("Fonts\\ARIALN.TTF", 10, "")
+tfTitle.keyHint:SetText("nearest T")
+tfTitle.keyHint:SetTextColor(0.54, 0.56, 0.61, 1)
+
+tf.sections = {}
+for _, secpair in ipairs({ { "enemy", "KILL" }, { "friendly", "TALK TO" } }) do
+  local fs = tf:CreateFontString(nil, "OVERLAY")
+  fs:SetFont("Fonts\\ARIALN.TTF", 10, "")
+  fs:SetText(secpair[2])
+  fs:SetTextColor(0.54, 0.56, 0.61, 1)
+  tf.sections[secpair[1]] = fs
+end
+
+-- RowifyTargets (Targeting.lua 1089-1124): the OpenXP row look.
+local function rowify(btn, kind)
+  btn.kind = kind
+  btn.hl = btn:CreateTexture(nil, "BACKGROUND")
+  btn.hl:SetAllPoints()
+  btn.hl:SetColorTexture(1, 1, 1, 0)
+  btn.bar = btn:CreateTexture(nil, "ARTWORK")
+  btn.bar:SetWidth(2)
+  if kind == "enemy" then
+    btn.bar:SetColorTexture(1, 112 / 255, 67 / 255, 1)
+  else
+    btn.bar:SetColorTexture(61 / 255, 187 / 255, 122 / 255, 1)
+  end
+  btn.iconHolder = CreateFrame("Frame", nil, btn)
+  btn.icon = btn.iconHolder:CreateTexture(nil, "ARTWORK")
+  btn.key = btn:CreateFontString(nil, "OVERLAY")
+  btn.key:SetFont("Fonts\\ARIALN.TTF", 10, "")
+  btn.key:SetTextColor(0.54, 0.56, 0.61, 1)
+  btn.label = btn:CreateFontString(nil, "OVERLAY")
+  btn.label:SetFont("Fonts\\ARIALN.TTF", 12, "")
+  btn.label:SetTextColor(0.92, 0.93, 0.95, 1)
+end
+
+tf.enemyTargetButtons = {}
+tf.friendlyTargetButtons = {}
+local function targetButton(list, globalName, kind, macrotext)
+  local btn = CreateFrame("Button", globalName, tf, "SecureActionButtonTemplate")
+  btn.__protected = true
+  btn:SetAttribute("type", "macro")
+  btn:SetAttribute("macrotext", macrotext)
+  btn:RegisterForClicks("AnyUp", "AnyDown")
+  rowify(btn, kind)
+  list[#list + 1] = btn
+  return btn
+end
+
+local eb1 = targetButton(tf.enemyTargetButtons, "RXPTargetFrame_EnemyButton1",
+  "enemy", "/targetexact Forest Lurker")
+targetButton(tf.enemyTargetButtons, "RXPTargetFrame_EnemyButton2",
+  "enemy", "/targetexact Mangy Wolf")
+targetButton(tf.friendlyTargetButtons, "RXPTargetFrame_FriendlyButton1",
+  "friendly", "/targetexact Wing Commander")
+
+-- The secure template runs the macro on click; the fake records it so tests
+-- can prove targeting still works after OXP-FUI restyles the rows.
+eb1:SetScript("OnClick", function() bump("RXPTargetFrame_EnemyButton1 click") end)
 
 -- Phase 2 windows -----------------------------------------------------------
 local itemFrame = CreateFrame("Frame", "RXPItemFrame", UIParent, "BackdropTemplate")
@@ -443,12 +591,59 @@ local function applyCardOpenXPLook()
   end
 end
 
+-- The Quest Targets family reset to OpenXP's own look (Targeting.lua 813-838,
+-- 899-908, 1089-1137). Nil-safe so tests can simulate frames going missing.
+function HARNESS.ApplyTargetsOpenXPLook()
+  local tf = N("RXPTargetFrame")
+  if not tf then return end
+  applyOpenXPLook(tf, tf.title and tf.title.text or nil)
+  -- Harness stand-in: a backdrop on the secure enemy button gives tests an
+  -- observable restyle state for it (the real rows carry no backdrop).
+  local eb1 = N("RXPTargetFrame_EnemyButton1")
+  applyOpenXPLook(eb1, eb1 and eb1.label or nil)
+  local title = tf.title
+  if title then
+    if title.text then
+      title.text:SetFont("Fonts\\ARIALN.TTF", 11, "")
+      title.text:SetTextColor(0.62, 0.64, 0.70, 1)
+    end
+    if title.keyHint then
+      title.keyHint:SetFont("Fonts\\ARIALN.TTF", 10, "")
+      title.keyHint:SetTextColor(0.54, 0.56, 0.61, 1)
+    end
+  end
+  if type(tf.sections) == "table" then
+    for _, fs in pairs(tf.sections) do
+      fs:SetFont("Fonts\\ARIALN.TTF", 10, "")
+      fs:SetTextColor(0.54, 0.56, 0.61, 1)
+    end
+  end
+  for _, list in ipairs({ tf.enemyTargetButtons, tf.friendlyTargetButtons }) do
+    if type(list) == "table" then
+      for _, btn in ipairs(list) do
+        btn.hl:SetColorTexture(1, 1, 1, 0)
+        if btn.kind == "enemy" then
+          btn.bar:SetColorTexture(1, 112 / 255, 67 / 255, 1)
+        else
+          btn.bar:SetColorTexture(61 / 255, 187 / 255, 122 / 255, 1)
+        end
+        btn.key:SetFont("Fonts\\ARIALN.TTF", 10, "")
+        btn.key:SetTextColor(0.54, 0.56, 0.61, 1)
+        btn.label:SetFont("Fonts\\ARIALN.TTF", 12, "")
+        btn.label:SetTextColor(0.92, 0.93, 0.95, 1)
+      end
+    end
+  end
+end
+
 function HARNESS.ApplyOpenXPLook()
   applyCardOpenXPLook()
-  applyOpenXPLook(N("RXPG_ARROW"), N("RXPG_ARROW").text)
-  applyOpenXPLook(N("RXPTargetFrame"), N("RXPTargetFrame_title").text)
-  -- UpdateTargetFrame rebuilds the secure target rows, restyling them too.
-  applyOpenXPLook(N("RXPTargetFrame_EnemyButton1"), N("RXPTargetFrame_EnemyButton1").label)
+  -- Like OpenXP's own code (addon.arrowFrame), not a _G lookup: a test may
+  -- nil the global to simulate a rename without breaking the fake itself.
+  applyOpenXPLook(af, af.text)
+  -- The dial/text repaint card.ArrowUpdate does (once the card styled it).
+  ArrowPaintOpenXP()
+  HARNESS.ApplyTargetsOpenXPLook()
   applyOpenXPLook(N("RXPItemFrame"), N("RXPItemFrame_title").text)
   applyOpenXPLook(N("RXPLevelSplits"), N("RXPLevelSplits_title").text)
   applyOpenXPLook(N("OpenXPWelcomeFrame"))
@@ -494,12 +689,27 @@ addon.card = {
   BuildStepList = card.BuildStepList,
   FillStepList = card.FillStepList,
   ToggleStepList = card.ToggleStepList,
-  Refresh = function(_, force) refreshCard(force) end,  SkinPanels = function() bump("card.SkinPanels")
+  Refresh = function(_, force) refreshCard(force) end,
+  SkinPanels = function() bump("card.SkinPanels")
     HARNESS.ApplyOpenXPLook()
   end,
   SkinPanel = function(_, f) bump("card.SkinPanel"); if f then applyOpenXPLook(f.__raw or f) end end,
   ApplyFonts = function()
     bump("card.ApplyFonts")
+    -- card.ApplyFonts re-fonts its remembered fixed text (OpenXPCard.lua
+    -- 1898-1908) before SkinPanels/Refresh run.
+    local function refont(fs, size)
+      if not fs then return end
+      fs:SetFont("Fonts\\ARIALN.TTF", size or 12, "OUTLINE")
+      fs:SetShadowOffset(0, 0)
+    end
+    local h = HARNESS.cardBits and HARNESS.cardBits.header
+    refont(h and h.zone, 12)
+    refont(af.text, 12)
+    refont(af.oxpDist, 17)
+    refont(af.oxpLabel, 12)
+    local t = N("RXPTargetFrame_title")
+    if t and t.text then refont(t.text, 12) end
     HARNESS.ApplyOpenXPLook()
   end,
 }
@@ -512,9 +722,15 @@ addon.currentGuide = { name = "Fake Guide", displayname = "Fake Guide 1-10", ste
 addon.arrowFrame = af
 addon.targeting = {
   activeTargetFrame = tf,
-  UpdateTargetFrame = function() bump("targeting.UpdateTargetFrame"); HARNESS.ApplyOpenXPLook() end,
+  -- OpenXP itself bails out of combat for target-frame rebuilds
+  -- (Targeting.lua 1210): so does the fake.
+  UpdateTargetFrame = function()
+    bump("targeting.UpdateTargetFrame")
+    if InCombatLockdown() then return end
+    HARNESS.ApplyOpenXPLook()
+  end,
   RenderTargetFrameBackground = function() bump("targeting.RenderTargetFrameBackground")
-    applyOpenXPLook(N("RXPTargetFrame"))
+    HARNESS.ApplyTargetsOpenXPLook()
   end,
 }
 addon.tracker = {
@@ -539,13 +755,22 @@ end
 
 function addon.SetupArrow()
   bump("SetupArrow")
-  af.texture:SetTexture("Interface\\AddOns\\OpenXP\\Textures\\Card\\pointer")
+  af.text:SetFont("Fonts\\ARIALN.TTF", 9, "OUTLINE")
+  af:UpdateVisuals()
   applyOpenXPLook(nil, af.text)
+  -- The card wraps addon.SetupArrow and runs card.SetupArrow, which styles
+  -- the arrow once and re-points OnUpdate at card.TimedArrow (ArrowUpdate).
+  StyleArrow()
+  af:SetScript("OnUpdate", ArrowUpdate)
 end
 
 af.UpdateVisuals = function()
   bump("arrowFrame.UpdateVisuals")
   af.texture:SetTexture("Interface\\AddOns\\OpenXP\\Textures\\Card\\pointer")
+end
+
+addon.DrawArrow = function(self)
+  bump("DrawArrow")
 end
 
 -- LibStub AceAddon-3.0 shim serving the fake addon table.
@@ -559,3 +784,14 @@ HARNESS.libs["AceAddon-3.0"] = {
 HARNESS.openxp = addon
 _G.RXPGuides = {}
 HARNESS.addonMetadata["OpenXP"] = { Title = "OpenXP", Version = HARNESS.openxpVersion }
+
+-- addon:OnInitialize calls addon.SetupArrow() (RXPGuides.lua:1572) — the
+-- card's wrapper styles the dial and installs the per-frame update.
+addon.SetupArrow()
+
+-- Advance the arrow by one frame: run whatever OnUpdate script OpenXP (or a
+-- skin under test) currently has installed, exactly like the client would.
+function HARNESS.ArrowTick()
+  local script = af:GetScript("OnUpdate")
+  if script then script(af, 1 / 60) end
+end
