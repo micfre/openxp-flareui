@@ -1,10 +1,13 @@
 -- OXP-FUI · Core: namespace, saved settings, slash commands.
 --
 -- OXP-FUI restyles OpenXP's windows to the FlareUI Quest Tracker look at
--- runtime. It never modifies OpenXP files, never changes OpenXP layout,
--- positions or sizes, and never touches the world Map, the Minimap,
--- OpenXP's settings windows, the hidden legacy RestedXP window or any
--- Blizzard frame. See Engine.lua for the skin-module extension points.
+-- runtime. It never modifies OpenXP files, never touches the world Map,
+-- the Minimap, OpenXP's settings windows, the hidden legacy RestedXP window
+-- or any Blizzard frame, and the skins never change OpenXP layout, positions
+-- or sizes (guarded, see Engine.lua). The one sanctioned exception is the
+-- optional card dock (Docking.lua): while its switch is on and a live
+-- FlareUI Quest Tracker exists, it re-anchors the guide card to the tracker
+-- and can match the card's width to it.
 
 local ADDON_NAME, OXPFUI = ...
 
@@ -41,6 +44,11 @@ local function defaults()
     opacity = 0.6,          -- panel fill opacity, 0..1
     borderStyle = "Frames", -- Frames | Thick | Thin
     windows = windows,
+    -- FlareUI Quest Tracker dock (Docking.lua)
+    attachTracker = true,   -- dock the guide card to the tracker
+    attachSide = "bottom",  -- bottom | top: the tracker edge docked to
+    attachPadding = 8,      -- px between the card and the tracker
+    matchTrackerWidth = false, -- card width follows the tracker width
   }
 end
 

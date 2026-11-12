@@ -78,7 +78,7 @@ local function buildPanel()
   -- BackdropTemplate: theme.ApplyBackdrop needs the frame's SetBackdrop
   -- (a plain frame has none on this client family).
   local f = CreateFrame("Frame", "OXPFUIPanel", UIParent, "BackdropTemplate")
-  f:SetSize(340, 470)
+  f:SetSize(340, 500)
   f:SetPoint("CENTER", UIParent, "CENTER")
   f:SetFrameStrata("DIALOG")
   f:SetMovable(true)
@@ -127,6 +127,10 @@ local function buildPanel()
     db.enabled = not db.enabled
     masterDesc.isOn = db.enabled
     f.masterBtn.paint()
+    OXPFUI.Reapply("settings changed")
+    if OXPFUI.Dock and OXPFUI.Dock.Update then
+      OXPFUI.Dock.Update("settings changed")
+    end
   end)
   f.masterLabel = label(f, L.masterLabel, "title", "TITLE")
   f.masterLabel:SetPoint("LEFT", f.masterBtn, "RIGHT", 6, 0)
@@ -209,6 +213,70 @@ local function buildPanel()
     f.opacityValue:SetText(L.opacityValue:format(math.floor(db.opacity * 100 + 0.5)))
     OXPFUI.Reapply("settings changed")
   end)
+
+  -- FlareUI Quest Tracker dock ----------------------------------------------
+  -- Every control here acts immediately (no reload needed): Docking.lua
+  -- re-anchors the card on each change.
+  local function dockChanged()
+    if OXPFUI.Dock and OXPFUI.Dock.Update then
+      OXPFUI.Dock.Update("settings changed")
+    end
+  end
+
+  f.trackerHeader = label(f, L.trackerHeader, "header", "ZONE")
+  f.trackerHeader:SetPoint("TOPLEFT", f, "TOPLEFT", 10, -326)
+
+  local attachDesc = { isOn = db.attachTracker ~= false, hover = false }
+  f.attachBtn = makeToggle(f, function() return attachDesc end)
+  f.attachBtn:SetPoint("TOPLEFT", f, "TOPLEFT", 10, -344)
+  f.attachBtn:SetScript("OnClick", function()
+    db.attachTracker = not (db.attachTracker ~= false)
+    attachDesc.isOn = db.attachTracker ~= false
+    f.attachBtn.paint()
+    dockChanged()
+  end)
+  f.attachLabel = label(f, L.attachLabel, "body", "OBJECTIVE")
+  f.attachLabel:SetPoint("LEFT", f.attachBtn, "RIGHT", 6, 0)
+
+  f.attachSideLabel = label(f, L.attachSideLabel, "title", "TITLE")
+  f.attachSideLabel:SetPoint("TOPLEFT", f, "TOPLEFT", 10, -370)
+  f.attachSideBtn = makeCycleButton(f)
+  f.attachSideBtn:SetSize(160, 18)
+  f.attachSideBtn:SetPoint("LEFT", f.attachSideLabel, "RIGHT", 10, 0)
+  f.attachSideBtn:SetScript("OnClick", function()
+    db.attachSide = db.attachSide == "top" and "bottom" or "top"
+    f.attachSideBtn.text:SetText(db.attachSide == "top" and L.sideTop or L.sideBottom)
+    dockChanged()
+  end)
+  f.attachSideBtn.text:SetText(db.attachSide == "top" and L.sideTop or L.sideBottom)
+
+  f.paddingLabel = label(f, L.attachPaddingLabel, "title", "TITLE")
+  f.paddingLabel:SetPoint("TOPLEFT", f, "TOPLEFT", 10, -396)
+  f.paddingSlider = CreateFrame("Slider", nil, f)
+  f.paddingSlider:SetSize(100, 18)
+  f.paddingSlider:SetPoint("LEFT", f.paddingLabel, "RIGHT", 10, 0)
+  f.paddingSlider:SetMinMaxValues(0, 40)
+  f.paddingSlider:SetValueStep(1)
+  f.paddingSlider:SetValue(tonumber(db.attachPadding) or 8)
+  f.paddingValue = label(f, L.attachPaddingValue:format(tonumber(db.attachPadding) or 8))
+  f.paddingValue:SetPoint("LEFT", f.paddingSlider, "RIGHT", 8, 0)
+  f.paddingSlider:SetScript("OnValueChanged", function(_, value)
+    db.attachPadding = math.floor(value + 0.5)
+    f.paddingValue:SetText(L.attachPaddingValue:format(db.attachPadding))
+    dockChanged()
+  end)
+
+  local matchDesc = { isOn = db.matchTrackerWidth == true, hover = false }
+  f.matchBtn = makeToggle(f, function() return matchDesc end)
+  f.matchBtn:SetPoint("TOPLEFT", f, "TOPLEFT", 10, -424)
+  f.matchBtn:SetScript("OnClick", function()
+    db.matchTrackerWidth = not (db.matchTrackerWidth == true)
+    matchDesc.isOn = db.matchTrackerWidth == true
+    f.matchBtn.paint()
+    dockChanged()
+  end)
+  f.matchLabel = label(f, L.matchWidthLabel, "body", "OBJECTIVE")
+  f.matchLabel:SetPoint("LEFT", f.matchBtn, "RIGHT", 6, 0)
 
   -- Reload note --------------------------------------------------------------
   f.reloadNote = label(f, L.reloadNote, "body", "DIM")

@@ -17,6 +17,7 @@ LUA_DIR = pathlib.Path(__file__).resolve().parent / "lua"
 
 # TOC order; kept in sync with src/OXP-FUI/OXP-FUI.toc (build test enforces).
 ADDON_FILES = ["Core.lua", "Locale.lua", "Theme.lua", "Engine.lua",
+               "Docking.lua",
                "ArrowSkin.lua", "Card.lua", "SkinTargets.lua",
                "SkinTracker.lua", "SkinWindows.lua", "SkinTooltips.lua",
                "WelcomeFeedback.lua", "SettingsPanel.lua"]
@@ -56,7 +57,8 @@ class Env:
     """One lupa LuaRuntime = one simulated client with one addon session."""
 
     def __init__(self, *, openxp: bool = True, openxp_version: str = "1.3.48",
-                 db: dict | None = None, load_addon: bool = True):
+                 db: dict | None = None, load_addon: bool = True,
+                 flareui: bool = False, flareui_late: bool = False):
         self.lua = lupa.LuaRuntime(unpack_returned_tuples=True)
         self._eval_file(str(LUA_DIR / "wow_api.lua"))
         # Simulate the client reading our TOC metadata (Version/Title).
@@ -67,6 +69,12 @@ class Env:
         if openxp:
             self.run(f"HARNESS.openxpVersion = {_lua_literal(openxp_version)}")
             self._eval_file(str(LUA_DIR / "fake_openxp.lua"))
+        if flareui or flareui_late:
+            # flareui_late: define the fake without creating its frame, for
+            # tests that make FlareUI appear only after OXP-FUI loaded.
+            if flareui_late:
+                self.run("HARNESS.flareuiDeferred = true")
+            self._eval_file(str(LUA_DIR / "fake_flareui.lua"))
         if db is not None:
             self.run(f"OXPFUIDB = {_lua_literal(db)}")
         if load_addon:

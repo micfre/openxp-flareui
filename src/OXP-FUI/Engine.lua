@@ -36,6 +36,11 @@
 -- card.Refresh/SkinPanels/SkinPanel/ApplyFonts, targeting updates, tracker
 -- splits, active-item visuals) and re-applies every skin after each one, so
 -- OXP-FUI always wins over OpenXP's own theme, font and outline settings.
+--
+-- The card dock (Docking.lua) is the sanctioned exception to the blocked
+-- layout above: it runs outside the skin pipeline (Update rides along at
+-- the end of every Reapply) and is the only OXP-FUI code that moves or
+-- resizes an OpenXP frame, gated on its own saved switches.
 
 local ADDON_NAME, OXPFUI = ...
 
@@ -313,6 +318,11 @@ function OXPFUI.Reapply(reason)
   for _, def in ipairs(skins) do
     ApplySkin(def, state.lastReason)
   end
+  -- The card dock re-asserts itself after the skins on every pass (login,
+  -- every hooked OpenXP refresh, settings changes, combat end).
+  if OXPFUI.Dock and OXPFUI.Dock.Update then
+    OXPFUI.Dock.Update(state.lastReason)
+  end
 end
 
 -- ---------------------------------------------------------------------------
@@ -423,6 +433,9 @@ function OXPFUI.DebugReport()
     lines[#lines + 1] = L.debugWindows:format(table.concat(parts, ", "))
   end
   lines[#lines + 1] = L.debugPasses:format(state.passes, state.lastReason)
+  if OXPFUI.Dock and OXPFUI.Dock.Status then
+    lines[#lines + 1] = L.debugDocking:format(OXPFUI.Dock.Status())
+  end
 
   -- Per-skin outcome of the latest pass: which skins actually applied (the
   -- "Skinned" list), what was skipped or deferred and why. Only entries of

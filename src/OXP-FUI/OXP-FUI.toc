@@ -2,7 +2,7 @@
 ## Title: OXP-FUI
 ## Notes: FlareUI-style reskin for OpenXP
 ## Author: micfre
-## Version: 0.1.0
+## Version: 0.2.0
 ## X-Tested-OpenXP: 1.3.48
 ## RequiredDeps: OpenXP
 ## SavedVariables: OXPFUIDB
@@ -10,6 +10,7 @@ Core.lua
 Locale.lua
 Theme.lua
 Engine.lua
+Docking.lua
 ArrowSkin.lua
 Card.lua
 SkinTargets.lua
