@@ -61,10 +61,20 @@ header.zone = header:CreateFontString(nil, "OVERLAY")
 header.range = header:CreateFontString(nil, "OVERLAY")
 header.step = header:CreateFontString(nil, "OVERLAY")
 header.stepBtn = CreateFrame("Button", nil, header)
+header:SetPoint("TOPLEFT", card, "TOPLEFT", 1, -1)
+header:SetPoint("TOPRIGHT", card, "TOPRIGHT", -1, -1)
+header:SetHeight(28)
 
 -- Progress strip under the header.
 local progressBg = card:CreateTexture(nil, "ARTWORK")
 local progress = card:CreateTexture(nil, "OVERLAY")
+-- Real geometry: a 2px track right under the header (the body and history
+-- anchor to its bottom corners); the fill grows from its left end.
+progressBg:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 0, 0)
+progressBg:SetPoint("TOPRIGHT", header, "BOTTOMRIGHT", 0, 0)
+progressBg:SetHeight(2)
+progress:SetPoint("TOPLEFT", progressBg, "TOPLEFT")
+progress:SetHeight(2)
 
 -- Status pills ("DONE" / "SKIPPED" / "CHAIN MISSED") and their colors.
 local STATUS = {
@@ -198,6 +208,20 @@ bar.menu = MakeBarButton(bar)
 bar.collapse = MakeBarButton(bar)
 
 local xpStrip = CreateFrame("Frame", nil, bar)
+xpStrip:SetPoint("BOTTOMLEFT", bar, "BOTTOMLEFT", 0, 0)
+xpStrip:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT", 0, 0)
+xpStrip:SetHeight(8)
+-- The client derives a two-anchored frame's width from its anchors: the
+-- bar spans the card minus 1px each side, the strip spans the bar.
+rawset(card, "__width", 320)
+xpStrip.GetWidth = function(self)
+  local w = card:GetWidth() - 2
+  for _, p in ipairs(self.__points) do
+    if p[1] == "BOTTOMLEFT" then w = w - (p[4] or 0)
+    elseif p[1] == "BOTTOMRIGHT" then w = w + (p[4] or 0) end
+  end
+  return w
+end
 xpStrip.bg = xpStrip:CreateTexture(nil, "ARTWORK")
 xpStrip.rested = xpStrip:CreateTexture(nil, "ARTWORK")
 xpStrip.fill = xpStrip:CreateTexture(nil, "ARTWORK")
@@ -275,6 +299,15 @@ function card.FillStepList()
     row.hl:SetColorTexture(1, 1, 1, row.current and 0.05 or 0)
     row:Show()
   end
+end
+
+-- card.UpdateXP / the header progress fill, as OpenXP sizes them: the fill
+-- is (card width - 2) * fraction wide, the XP strip's textures a fraction of
+-- the strip's own width.
+function card.UpdateXP()
+  local w = xpStrip:GetWidth()
+  xpStrip.fill:SetWidth(math.max(1, w * 0.4))
+  xpStrip.rested:SetWidth(math.max(1, w * 0.6))
 end
 
 local function refreshCard(force)
@@ -936,6 +969,8 @@ local function applyCardOpenXPLook()
   oxpFont(header.range, CARD_C.dim)
   oxpFont(header.step, CARD_C.dim)
   progressBg:SetColorTexture(1, 1, 1, 0.08)
+  progress:SetWidth(math.max(1, (card:GetWidth() - 2) * 0.5))
+  card.UpdateXP()
   progress:SetColorTexture(CARD_C.blue[1], CARD_C.blue[2], CARD_C.blue[3], 1)
   oxpFont(hist.label, CARD_C.dim)
   oxpFont(hist.hint, CARD_C.faint)
@@ -1201,6 +1236,7 @@ local addon = {
 }
 
 addon.card = {
+  UpdateXP = card.UpdateXP,
   frame = card,
   grip = grip,
   hist = hist,

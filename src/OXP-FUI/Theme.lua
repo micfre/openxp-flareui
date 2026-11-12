@@ -45,7 +45,9 @@ function theme.NearColor(r, g, b, target)
 end
 
 -- Typography: header 13 / title 12 / body 11, no outline, 1px black shadow.
-theme.FONT_SIZES = { header = 13, title = 12, body = 11 }
+-- The card's header row is smaller than a window header: the zone name is
+-- one point under it and the level range / "Step n / n" counter two.
+theme.FONT_SIZES = { header = 13, title = 12, body = 11, zone = 12, counter = 11 }
 
 -- Bundled and built-in font choices (order = settings panel cycle order).
 local MEDIA = "Interface\\AddOns\\OXP-FUI\\Media\\"
@@ -255,71 +257,6 @@ function theme.ApplyScrollBar(frame, opts)
     chrome.track:Hide()
     chrome.thumb:Hide()
   end
-end
-
--- FlareUI's bronze square button, redrawn procedurally (no art file):
--- a bronze outline with chamfered corner steps around a near-black fill,
--- every rect a whole-pixel colour texture with snapping off. Applied over
--- an existing OpenXP button — nothing about the button is moved or resized;
--- the button's own icon and label draw on top. Hover lights the outline to
--- the frame-border bronze (C.BOX -> C.BOX_LIT) via hooked scripts, leaving
--- whatever OpenXP's own OnEnter/OnLeave do untouched.
---   opts.size:   square size in pixels (default 12, FlareUI's header button)
---   opts.offset: {x, y} shift from the button's centre, in pixels
-function theme.ApplyBoxButtonPaint(button, opts)
-  local rf = theme.RealFrame(button)
-  if not (rf and rf.CreateTexture and rf.HookScript) then return end
-  opts = opts or {}
-  local size = math.floor(opts.size or 12)
-  local dx = (opts.offset and opts.offset.x) or 0
-  local dy = (opts.offset and opts.offset.y) or 0
-
-  local chrome = rf.oxpfuiBox
-  if not chrome then
-    local function rect(w, h)
-      local t = rf:CreateTexture(nil, "BACKGROUND")
-      t:SetSnapToPixelGrid(false)
-      t:SetTexelSnappingBias(0)
-      t:SetWidth(w)
-      t:SetHeight(h)
-      return t
-    end
-    -- half the square, from its centre
-    local half = size / 2
-    local function place(t, x, y)
-      t:SetPoint("TOPLEFT", rf, "CENTER", dx + x, dy + y)
-    end
-    local outline = {}
-    -- four edges
-    outline[1] = rect(size, 1);      place(outline[1], -half, half)        -- top
-    outline[2] = rect(size, 1);      place(outline[2], -half, -half + 1)   -- bottom
-    outline[3] = rect(1, size - 2);  place(outline[3], -half, half - 1)    -- left
-    outline[4] = rect(1, size - 2);  place(outline[4], half - 1, half - 1) -- right
-    -- four chamfer steps just outside the corners
-    outline[5] = rect(2, 1)
-    outline[5]:SetPoint("BOTTOMRIGHT", rf, "CENTER", dx - half, dy + half)
-    outline[6] = rect(2, 1)
-    outline[6]:SetPoint("BOTTOMLEFT", rf, "CENTER", dx + half, dy + half)
-    outline[7] = rect(2, 1)
-    outline[7]:SetPoint("TOPRIGHT", rf, "CENTER", dx - half, dy - half)
-    outline[8] = rect(2, 1)
-    outline[8]:SetPoint("TOPLEFT", rf, "CENTER", dx + half, dy - half)
-    local fill = rect(size - 2, size - 2)
-    fill:SetPoint("TOPLEFT", rf, "CENTER", dx - half + 1, dy + half - 1)
-    fill:SetColorTexture(0, 0, 0, 0.85)
-    chrome = { size = size, outline = outline, fill = fill }
-    rf.oxpfuiBox = chrome
-    local function paint(lit)
-      local c = lit and theme.C.BOX_LIT or theme.C.BOX
-      for _, t in ipairs(chrome.outline) do
-        t:SetColorTexture(c[1], c[2], c[3], 1)
-      end
-    end
-    chrome.paint = paint
-    rf:HookScript("OnEnter", function() paint(true) end)
-    rf:HookScript("OnLeave", function() paint(false) end)
-  end
-  chrome.paint(false)
 end
 
 -- Sub-panel inset: the warm dark fill at a slightly firmer opacity than the

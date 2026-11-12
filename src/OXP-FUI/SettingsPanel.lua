@@ -73,7 +73,9 @@ local ROW = 22
 local function buildPanel()
   local db = OXPFUI.db
 
-  local f = CreateFrame("Frame", "OXPFUIPanel", UIParent)
+  -- BackdropTemplate: theme.ApplyBackdrop needs the frame's SetBackdrop
+  -- (a plain frame has none on this client family).
+  local f = CreateFrame("Frame", "OXPFUIPanel", UIParent, "BackdropTemplate")
   f:SetSize(340, 470)
   f:SetPoint("CENTER", UIParent, "CENTER")
   f:SetFrameStrata("DIALOG")

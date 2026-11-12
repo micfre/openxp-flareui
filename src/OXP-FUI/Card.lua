@@ -1,7 +1,7 @@
 -- OXP-FUI · Card: the guide card and step list, in the FlareUI Quest
 -- Tracker look (ticket #4: bronze border, warm dark fill, gold titles,
--- grey objectives, green completed, blue current, bronze square buttons
--- and a bronze scrollbar over OpenXP's existing controls).
+-- grey objectives, green completed, blue current and a bronze scrollbar;
+-- OpenXP's own borderless icon buttons are left as they are).
 --
 -- Everything here is appearance only. The engine's guarded frames refuse
 -- layout calls, so this skin cannot move or resize anything OpenXP owns.
@@ -104,12 +104,12 @@ end
 -- ---------------------------------------------------------------------------
 
 local function skinHeader(header)
-  theme.ApplyText(header.zone, "header", "ZONE")
-  theme.ApplyText(header.range, "header", "DIM")
-  theme.ApplyText(header.step, "header", "TITLE")
+  theme.ApplyText(header.zone, "zone", "ZONE")
+  theme.ApplyText(header.range, "counter", "DIM")
+  theme.ApplyText(header.step, "counter", "TITLE")
   setVertex(header.dot, C.ZONE)  -- the blue accent dot becomes amber
-  -- a bronze square over the "Step n / n" hit-area button, at its right end
-  if header.stepBtn then theme.ApplyBoxButtonPaint(header.stepBtn, { offset = { x = 28, y = 0 } }) end
+  -- header.stepBtn (the invisible hit area over "Step n / n" that opens the
+  -- step list) is deliberately left as OpenXP draws it: no chrome.
 end
 
 -- FlareUI's header band: a divider texture right under OpenXP's header.
@@ -177,7 +177,6 @@ local function skinBar(bar)
   for _, btn in ipairs({ bar.prev, bar.next, bar.menu, bar.settings,
                          bar.collapse, bar.find, bar.stop, bar.resume }) do
     if btn then
-      theme.ApplyBoxButtonPaint(btn)
       theme.ApplyText(btn.label, "body", "OBJECTIVE")
       if btn.bg and matches(btn.bg, theme.OXP_BLUE) then
         setVertex(btn.bg, C.ZONE, 0.16)  -- labelled buttons' blue wash -> amber
@@ -199,7 +198,6 @@ end
 local function skinMini(mini)
   theme.ApplyText(mini.text, "title", "TITLE")
   theme.ApplyText(mini.count, "body", "DIM")
-  if mini.expand then theme.ApplyBoxButtonPaint(mini.expand) end
   if mini.badge then
     amberIfBlue(mini.badge.fill, 0.16)
     amberIfBlue(mini.badge.ring)
@@ -210,7 +208,6 @@ end
 local function skinStepList(list, openxp)
   theme.ApplyBackdrop(list)
   theme.ApplyText(list.title, "header", "TITLE")
-  if list.close then theme.ApplyBoxButtonPaint(list.close) end
   local rows = list.rows or {}
   for _, row in ipairs(rows) do
     local colorName = "TITLE"
@@ -238,6 +235,92 @@ local function skinStepList(list, openxp)
       return frac, visible / total, true
     end,
   })
+end
+
+-- ---------------------------------------------------------------------------
+-- Progress bars
+-- ---------------------------------------------------------------------------
+
+-- OpenXP draws both progress bars (the step progress under the header and
+-- the XP strip along the bottom) edge to edge, 1px inside the card, so with
+-- the FlareUI border art their ends sit on top of it. This is the one place
+-- the card skin lays anything out: each bar is inset by BAR_INSET on BOTH
+-- sides (shifting it right alone would push its right end past the border
+-- and the window edge). Only the bars themselves move, never the header,
+-- body or any other element; every pass is idempotent.
+local BAR_INSET = 3
+
+-- Inset the header progress bar: the 2px track and the fill that grows
+-- from its left end. OpenXP anchors the body and history to the track's
+-- bottom corners, so the track itself stays; it is hidden and an inset
+-- copy of it is drawn instead, and only the fill is moved and shortened.
+local function insetStepProgress(rf, header, ctx)
+  local hf = theme.RealFrame(header)
+  local okr, regions = pcall(function() return { rf:GetRegions() } end)
+  if not (hf and okr) then return end
+  -- The first anchor's relative frame, for any texture (nil when unreadable).
+  local function anchorOf(region)
+    if region == rf.oxpfuiTrack or not region.GetObjectType
+        or region:GetObjectType() ~= "Texture" then
+      return nil
+    end
+    local ok, _, rel = pcall(region.GetPoint, region, 1)
+    return ok and rel or nil
+  end
+  -- The track is a thin texture hung under the header (a few px tall, not
+  -- compared with == so pixel rounding cannot hide it).
+  local track, fill
+  for _, region in ipairs(regions) do
+    if anchorOf(region) == hf then
+      local okh, h = pcall(region.GetHeight, region)
+      if okh and type(h) == "number" and h > 0 and h <= 4 then track = region end
+    end
+  end
+  if not track then
+    ctx.Skip("card: step progress track not found")
+    return
+  end
+  for _, region in ipairs(regions) do
+    if anchorOf(region) == track then fill = region end
+  end
+  if not fill then ctx.Skip("card: step progress fill not found") end
+
+  local own = rf.oxpfuiTrack
+  if not own then
+    own = rf:CreateTexture(nil, "ARTWORK")
+    own:SetHeight(2)
+    rf.oxpfuiTrack = own
+  end
+  own:ClearAllPoints()
+  own:SetPoint("TOPLEFT", hf, "BOTTOMLEFT", BAR_INSET, 0)
+  own:SetPoint("TOPRIGHT", hf, "BOTTOMRIGHT", -BAR_INSET, 0)
+  own:SetColorTexture(1, 1, 1, 0.08)
+  track:SetAlpha(0)
+
+  if not fill then return end
+  fill:ClearAllPoints()
+  fill:SetPoint("TOPLEFT", track, "TOPLEFT", BAR_INSET, 0)
+  -- OpenXP sizes the fill to (card width - 2) * fraction on each refresh;
+  -- scale that into the shorter track, once per OpenXP-set width.
+  local width, cardW = fill:GetWidth(), rf:GetWidth()
+  if width and cardW and cardW > 2 + 2 * BAR_INSET
+      and not (fill.oxpfuiWidth and math.abs(fill.oxpfuiWidth - width) < 0.01) then
+    local scaled = math.max(1, width * (cardW - 2 - 2 * BAR_INSET) / (cardW - 2))
+    fill:SetWidth(scaled)
+    fill.oxpfuiWidth = scaled
+  end
+end
+
+-- Inset the XP strip: the strip frame carries its track, rested and fill
+-- textures with it; OpenXP sizes them from the strip's own width, so it is
+-- asked to do that again once the strip is narrower.
+local function insetXPStrip(xpStrip, bar, cardModule)
+  local sf, bf = theme.RealFrame(xpStrip), theme.RealFrame(bar)
+  if not (sf and bf and sf.SetPoint) then return end
+  sf:ClearAllPoints()
+  sf:SetPoint("BOTTOMLEFT", bf, "BOTTOMLEFT", BAR_INSET, 0)
+  sf:SetPoint("BOTTOMRIGHT", bf, "BOTTOMRIGHT", -BAR_INSET, 0)
+  if cardModule and cardModule.UpdateXP then pcall(cardModule.UpdateXP) end
 end
 
 -- ---------------------------------------------------------------------------
@@ -269,12 +352,16 @@ local function Apply(ctx)
   if header then
     skinHeader(ctx.Guard(header))
     ensureDivider(f, header)
+    insetStepProgress(rf, header, ctx)
   end
   if cardModule and cardModule.hist then skinHist(ctx.Guard(cardModule.hist), openxp) end
   if cardModule then skinBlocks(cardModule.blocksForTest) end
   if upNext then skinUpNext(ctx.Guard(upNext)) end
   if bar then skinBar(ctx.Guard(bar)) end
-  if cardModule and cardModule.xpStrip then skinXPStrip(cardModule.xpStrip) end
+  if cardModule and cardModule.xpStrip then
+    skinXPStrip(cardModule.xpStrip)
+    if bar then insetXPStrip(cardModule.xpStrip, bar, cardModule) end
+  end
   if mini then skinMini(ctx.Guard(mini)) end
   if list then skinStepList(ctx.Guard(list), openxp) end
 

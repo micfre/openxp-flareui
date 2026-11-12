@@ -88,9 +88,10 @@ class CardTextColors(unittest.TestCase):
         self.assertEqual(color_of(env, f"{hb}.zone"), ZONE)      # zone headers bronze
         self.assertEqual(color_of(env, f"{hb}.range"), GREY_DONE)  # counters dim
         self.assertEqual(color_of(env, f"{hb}.step"), GOLD)      # step name gold
-        for part in ("zone", "range", "step"):
-            self.assertEqual(font_of(env, f"{hb}.{part}"), (FRIZQT, 13, ""),
-                             f"header.{part} must be Friz Quadrata 13, no outline")
+        # zone is 1pt under the 13 header size, range / step 2pt under it
+        for part, size in (("zone", 12), ("range", 11), ("step", 11)):
+            self.assertEqual(font_of(env, f"{hb}.{part}"), (FRIZQT, size, ""),
+                             f"header.{part} must be Friz Quadrata {size}, no outline")
             self.assertEqual(env.run(
                 f"local x,y = {hb}.{part}:GetShadowOffset(); return x,y"), (1, -1))
             self.assertEqual(env.run(
@@ -175,7 +176,7 @@ class CardTypography(unittest.TestCase):
         env.boot()
         roboto = "Interface\\AddOns\\OXP-FUI\\Media\\Fonts\\RobotoCondensed-Regular.ttf"
         bits = "HARNESS.cardBits"
-        for expr, size in ((f"{bits}.header.zone", 13),
+        for expr, size in ((f"{bits}.header.zone", 12),
                            (f"{bits}.blocks[1].title", 12),
                            (f"{bits}.blocks[1].lines[1].text", 11)):
             self.assertEqual(font_of(env, expr), (roboto, size, ""))
@@ -188,7 +189,7 @@ class CardTypography(unittest.TestCase):
         env.boot()
         zone = "HARNESS.cardBits.header.zone"
         env.run("HARNESS.openxp.card.ApplyFonts()")
-        self.assertEqual(font_of(env, zone), (FRIZQT, 13, ""))
+        self.assertEqual(font_of(env, zone), (FRIZQT, 12, ""))
         self.assertEqual(color_of(env, zone), ZONE)
         self.assertEqual(env.run(
             f"local x,y = {zone}:GetShadowOffset(); return x,y"), (1, -1))
@@ -299,39 +300,17 @@ CARD_BUTTONS = (
 )
 
 
-class BronzeSquareButtons(unittest.TestCase):
-    """Story 3: the header band look — FlareUI-style bronze square buttons
-    drawn procedurally over OpenXP's existing controls."""
+class BorderlessButtons(unittest.TestCase):
+    """OpenXP's icon buttons (and the invisible "Step n / n" hit area) keep
+    their own borderless look: the skin paints no square around them."""
 
-    def test_every_card_button_gets_the_bronze_square_paint(self):
+    def test_no_card_button_gets_a_square_border(self):
         env = Env()
         env.boot()
-        for expr in CARD_BUTTONS:
+        env.run("HARNESS.openxp.card.ToggleStepList()")
+        for expr in CARD_BUTTONS + ("HARNESS.cardBits.header.stepBtn",):
             with self.subTest(button=expr):
-                box = f"{expr}.oxpfuiBox"
-                self.assertNotEqual(env.run(f"return {box} == nil"), True)
-                rects = env.run(f"return #({box}.outline)")
-                self.assertGreaterEqual(rects, 8)  # 4 edges + 4 corner steps
-                self.assertNotEqual(env.run(f"return {box}.fill == nil"), True)
-                # drawn on the button itself, bronze at rest
-                self.assertEqual(env.run(
-                    f"return {box}.outline[1]:GetParent() == ({expr}.__raw or {expr})"), True)
-                self.assertEqual(vertex_of(env, f"{box}.outline[1]"), BOX)
-                self.assertEqual(env.run(f"return {box}.size"), 12)
-
-    def test_hover_lights_the_square_and_keeps_openxp_behaviour(self):
-        env = Env()
-        env.boot()
-        btn = "HARNESS.cardBits.bar.prev"
-        box = f"{btn}.oxpfuiBox"
-        # run the button's OnEnter the way the client would
-        env.run(f"local s = {btn}:GetScript('OnEnter'); s({btn})")
-        self.assertEqual(vertex_of(env, f"{box}.outline[1]"), BOX_LIT)
-        # OpenXP's own hover behaviour (bg wash) still ran: the hook chained
-        self.assertEqual(env.run(
-            f"local r,g,b = {btn}.bg:GetVertexColor(); return r,g,b"), (1.0, 1.0, 1.0))
-        env.run(f"local s = {btn}:GetScript('OnLeave'); s({btn})")
-        self.assertEqual(vertex_of(env, f"{box}.outline[1]"), BOX)
+                self.assertEqual(env.run(f"return {expr}.oxpfuiBox == nil"), True)
 
     def test_chrome_never_moves_or_resizes_the_buttons(self):
         env = Env()
@@ -347,6 +326,76 @@ class BronzeSquareButtons(unittest.TestCase):
                         0, f"{expr}:{method} was called")
 
 
+class ProgressBarsClearTheBorder(unittest.TestCase):
+    """The step progress bar and the XP strip are inset 3px on both sides so
+    neither end sits on the border art (a right-only shift would push the
+    right end past the window edge)."""
+
+    W = 320  # the fake card's width
+
+    def _x(self, env, expr, point):
+        # offset of the named anchor point, from the Lua anchors
+        return env.run(
+            f"for i = 1, {expr}:GetNumPoints() do local p,_,_,x = {expr}:GetPoint(i); "
+            f"if p == {point!r} then return x end end return nil")
+
+    def test_step_progress_fill_starts_3px_in_and_stays_inside_the_track(self):
+        env = Env()
+        env.boot()
+        fill = "HARNESS.cardBits.progress"
+        self.assertEqual(self._x(env, fill, "TOPLEFT"), 3)
+        # OpenXP sized it to (W - 2) * 0.5; the track is now W - 8 wide
+        self.assertAlmostEqual(env.run(f"return {fill}:GetWidth()"),
+                               (self.W - 8) * 0.5)
+        # full progress would end at 3 + (W - 8) = W - 5: inside the window
+        self.assertLess(3 + (self.W - 8), self.W - 3)
+
+    def test_reapply_does_not_shrink_the_fill_again(self):
+        env = Env()
+        env.boot()
+        fill = "HARNESS.cardBits.progress"
+        before = env.run(f"return {fill}:GetWidth()")
+        env.run("OXPFUI.Reapply('test')")
+        env.run("OXPFUI.Reapply('test')")
+        self.assertEqual(env.run(f"return {fill}:GetWidth()"), before)
+        # a fresh OpenXP refresh resizes it, and it is scaled once more
+        env.run("HARNESS.openxp.card.Refresh(nil, true)")
+        self.assertAlmostEqual(env.run(f"return {fill}:GetWidth()"),
+                               (self.W - 8) * 0.5)
+
+    def test_openxp_track_is_hidden_and_replaced_by_an_inset_one(self):
+        env = Env()
+        env.boot()
+        self.assertEqual(env.run("return OpenXPCard.oxpfuiTrack ~= nil"), True)
+        self.assertEqual(self._x(env, "OpenXPCard.oxpfuiTrack", "TOPLEFT"), 3)
+        self.assertEqual(self._x(env, "OpenXPCard.oxpfuiTrack", "TOPRIGHT"), -3)
+        self.assertEqual(env.run("return #OpenXPCard.oxpfuiTrack.__points"), 2)
+
+    def test_xp_strip_is_inset_on_both_sides_and_resized(self):
+        env = Env()
+        env.boot()
+        strip = "HARNESS.cardBits.xpStrip"
+        self.assertEqual(self._x(env, strip, "BOTTOMLEFT"), 3)
+        self.assertEqual(self._x(env, strip, "BOTTOMRIGHT"), -3)
+        self.assertEqual(env.run(f"return {strip}:GetWidth()"), self.W - 8)
+        self.assertAlmostEqual(env.run(f"return {strip}.fill:GetWidth()"),
+                               (self.W - 8) * 0.4)
+
+    def test_body_and_header_anchors_are_untouched(self):
+        env = Env()
+        env.boot()
+        env.run("HARNESS.openxp.card.Refresh(nil, true)")
+        self.assertEqual(env.run(
+            "local n=0; for _,c in ipairs(HARNESS.cardBits.header.__calls) do "
+            "if c[1]=='SetPoint' or c[1]=='ClearAllPoints' then n=n+1 end end; return n"), 2)  # OpenXP's own two anchors
+        # the track the body anchors to is never re-anchored
+        self.assertEqual(env.run(
+            "local n=0; for _,r in ipairs({OpenXPCard:GetRegions()}) do "
+            "if r.__height == 2 and r ~= OpenXPCard.oxpfuiTrack and r.__points[1] "
+            "and r.__points[1][2] == HARNESS.cardBits.header then "
+            "for _,c in ipairs(r.__calls) do if c[1]=='ClearAllPoints' then n=n+1 end end end end return n"), 0)
+
+
 class HeaderBand(unittest.TestCase):
     def test_header_band_gets_flareui_divider_under_it(self):
         env = Env()
@@ -360,15 +409,6 @@ class HeaderBand(unittest.TestCase):
         # header without touching it
         self.assertEqual(env.run(f"return {divider}:GetParent() == _G.OpenXPCard"), True)
         self.assertGreaterEqual(env.run(f"return {divider}:GetNumPoints()"), 2)
-
-    def test_step_list_and_header_buttons_are_chromed_too(self):
-        env = Env()
-        env.boot()
-        env.run("HARNESS.openxp.card.ToggleStepList()")
-        self.assertNotEqual(
-            env.run("return HARNESS.cardBits.list.close.oxpfuiBox == nil"), True)
-        self.assertNotEqual(
-            env.run("return HARNESS.cardBits.header.stepBtn.oxpfuiBox == nil"), True)
 
 
 class CardSwitches(unittest.TestCase):

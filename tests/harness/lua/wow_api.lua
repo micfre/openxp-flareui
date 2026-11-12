@@ -9,6 +9,8 @@
 --     the object's __calls list as { "Method", arg1, arg2, ... } so tests can
 --     assert "this frame was never touched" or "no layout call happened".
 --   * Getters mirror the real WoW API (GetBackdrop, GetTextColor, GetFont...).
+--   * Widget methods validate their self (it must be the widget itself),
+--     like the real client's C API.
 --   * Unknown methods raise a loud error on purpose: extending the stub must
 --     be a deliberate act, and silent no-ops would let tests pass vacuously.
 
@@ -415,6 +417,23 @@ newObject = function(kind, objectType, name, parent)
   if objectType == "EditBox" then
     for k, v in pairs(fsExtra) do rawset(o, k, v) end
     for k, v in pairs(ebExtra) do rawset(o, k, v) end
+  end
+  -- Real-client contract, enforced: widget methods reject any self that is
+  -- not the object they belong to (the C API raises
+  -- "bad argument #-1 … Usage:"). Without this, a skin bug that passes a
+  -- proxy table as self — like the engine-guard bug this harness once
+  -- missed — works under test and fails only in game.
+  for k, v in pairs(o) do
+    if type(v) == "function" then
+      local orig, owner = v, o
+      rawset(o, k, function(self, ...)
+        if self ~= owner then
+          error(("Usage: self:%s() — self must be the widget itself, got %s")
+            :format(k, type(self)), 2)
+        end
+        return orig(owner, ...)
+      end)
+    end
   end
   return o
 end

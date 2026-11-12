@@ -25,6 +25,11 @@
 -- construction; the attempt is logged for /oxpfui debug. A guarded frame
 -- carries the real frame in .__raw, so skins (and Theme chrome recipes)
 -- parent and anchor their own textures to the frame the client knows.
+-- Every other method read through the guard is returned as a wrapper that
+-- calls it with the real frame as self: the client's widget API (and the
+-- Lua mixins it dispatches to, like BackdropTemplate) rejects any other
+-- self with a "bad argument #-1 … Usage:" error, so a proxy passed as self
+-- would abort every skin at its first widget call.
 --
 -- After login the engine post-hooks OpenXP's refresh/rebuild calls
 -- (RenderFrame, ReloadTheme, SetupArrow, arrowFrame.UpdateVisuals,
@@ -175,11 +180,17 @@ end
 local function Guard(raw, name, skinName)
   return setmetatable({ __raw = raw, __guardname = name }, {
     __index = function(_, k)
-      local v = raw[k]
       if BLOCKED_LAYOUT[k] then
         return function()
           NoteBlocked(skinName, name, k)
         end
+      end
+      local v = raw[k]
+      if type(v) == "function" then
+        -- Rebind: the method must run with the real frame as self, never
+        -- with this guard table (see the file header). A fresh wrapper per
+        -- read keeps up with OpenXP replacing a field function.
+        return function(_, ...) return v(raw, ...) end
       end
       return v
     end,
