@@ -670,6 +670,30 @@ class SettingsPanel(unittest.TestCase):
         env2.slash("/oxpfui")
         self.assertIsNone(env2.run("return OXPFUIPanel.versionNote"))
 
+    def test_note_labels_wrap_to_the_pane_width(self):
+        # Safety measure: both notes pin their right edge to the pane, so a
+        # longer-than-usual string wraps (a font string wraps at its width)
+        # instead of overflowing past the pane's right edge. The locale text
+        # is sized to fit on one line normally.
+        env = Env(openxp_version="1.3.40")  # mismatch -> versionNote exists
+        env.boot()
+        env.slash("/oxpfui")
+        for name in ("versionNote", "reloadNote"):
+            constrained = env.run(f"""
+              local fs = OXPFUIPanel.{name}
+              if not fs then return nil end
+              for i = 1, fs:GetNumPoints() do
+                local pt, rel, relPt, x = fs:GetPoint(i)
+                if pt == 'RIGHT' and rel == OXPFUIPanel
+                   and relPt == 'RIGHT' and x == -10 then
+                  return true
+                end
+              end
+              return false
+            """)
+            self.assertIs(constrained, True,
+                          f"{name} is not constrained to the pane width")
+
     def test_panel_strings_come_from_the_locale_table(self):
         env = Env()
         env.boot()

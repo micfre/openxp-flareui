@@ -114,6 +114,9 @@ local function buildPanel()
     f.versionNote = label(f, L.versionNote:format(mismatch, OXPFUI.testedOpenXP),
                           "body", "URGENT")
     f.versionNote:SetPoint("TOPLEFT", f.subtitle, "BOTTOMLEFT", 0, -4)
+    -- Right edge pinned to the pane so an unusually long note wraps instead
+    -- of overflowing (the text is sized to fit on one line normally).
+    f.versionNote:SetPoint("RIGHT", f, "RIGHT", -10, 0)
   end
 
   -- Master switch ---------------------------------------------------------
@@ -210,6 +213,8 @@ local function buildPanel()
   -- Reload note --------------------------------------------------------------
   f.reloadNote = label(f, L.reloadNote, "body", "DIM")
   f.reloadNote:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 10, 10)
+  -- Same wrap safety net as the version note: pinned right, grows upward.
+  f.reloadNote:SetPoint("RIGHT", f, "RIGHT", -10, 0)
 
   return f
 end
