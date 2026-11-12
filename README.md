@@ -29,6 +29,15 @@ skinned (`Skinned:`), what was skipped and why (`Skipped:`), errors
 (`Errors:`, plus `Earlier errors (previous passes):` as labelled history)
 and blocked layout attempts.
 
+## Timer bars
+
+With FlareUI installed, OpenXP's conditional progress bars (the flight
+timer and other step timers, shown under the card) are filled with the
+texture of FlareUI's unit frame bars ("FlareUI Forever"), keeping the bar's
+own colour. FlareUI hardcodes that texture today; if its maintainer adds a
+configurable unit frame texture, the bars should follow it. Without
+FlareUI the bars keep OpenXP's texture.
+
 ## Tracker dock
 
 When FlareUI is installed and its Quest Tracker is on, the settings panel

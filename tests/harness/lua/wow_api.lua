@@ -222,7 +222,7 @@ local function newFrame(frameType, name, parent, template)
   local f = newObject("Frame", frameType, name, parent)
   if template then f.template = template end
 
-  if frameType == "Frame" or frameType == "Button" or frameType == "Slider" or frameType == "CheckButton" or frameType == "EditBox" or frameType == "GameTooltip" then
+  if frameType == "Frame" or frameType == "Button" or frameType == "Slider" or frameType == "StatusBar" or frameType == "CheckButton" or frameType == "EditBox" or frameType == "GameTooltip" then
     f.CreateTexture = function(self, name2, layer, _, template2)
       local tex = newObject("Texture", "Texture", name2, self)
       tex.__layer = layer
@@ -277,6 +277,34 @@ local function newFrame(frameType, name, parent, template)
       self.__scrollChild = child
     end
     f.GetScrollChild = function(self) return self.__scrollChild end
+  end
+
+  -- StatusBar: the fill is an own texture object, like the client's
+  -- GetStatusBarTexture(); SetStatusBarColor tints it.
+  if frameType == "StatusBar" then
+    f.SetStatusBarTexture = function(self, path)
+      record(self, "SetStatusBarTexture", path)
+      if not self.__fill then
+        self.__fill = newObject("Texture", "Texture", nil, self)
+        self.__fill.__layer = "ARTWORK"
+      end
+      self.__fill:SetTexture(path)
+      -- Real client: the colour set earlier keeps tinting the new texture.
+      local c = self.__statusColor
+      if c then self.__fill:SetVertexColor(c[1], c[2], c[3], c[4]) end
+    end
+    f.GetStatusBarTexture = function(self) return self.__fill end
+    f.SetStatusBarColor = function(self, r, g, b, a)
+      record(self, "SetStatusBarColor", r, g, b, a)
+      self.__statusColor = { r, g, b, a or 1 }
+      if self.__fill then self.__fill:SetVertexColor(r, g, b, a or 1) end
+    end
+    f.GetStatusBarColor = function(self)
+      local c = self.__statusColor or { 1, 1, 1, 1 }
+      return c[1], c[2], c[3], c[4]
+    end
+    f.SetMinMaxValues = function(self, lo, hi) self.__min, self.__max = lo, hi end
+    f.SetValue = function(self, v) self.__value = v end
   end
 
   if frameType == "Slider" then

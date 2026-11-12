@@ -350,6 +350,8 @@ local function InstallHooks()
   HookRefresh(openxp, "RenderFrame", "OpenXP RenderFrame")
   HookRefresh(openxp, "ReloadTheme", "OpenXP ReloadTheme")
   HookRefresh(openxp, "SetupArrow", "OpenXP SetupArrow")
+  -- Every timer start, stop and hide re-sorts the bars (Timers.lua).
+  HookRefresh(openxp, "SortTimers", "OpenXP SortTimers")
   HookRefresh(openxp.card, "Refresh", "card.Refresh")
   HookRefresh(openxp.card, "SkinPanels", "card.SkinPanels")
   HookRefresh(openxp.card, "SkinPanel", "card.SkinPanel")

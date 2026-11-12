@@ -1298,6 +1298,41 @@ function addon.GetGuideProgress() return 4 end
 addon.currentGuide = { name = "Fake Guide", displayname = "Fake Guide 1-10", steps = {} }
 
 addon.arrowFrame = af
+
+-- Timer bars (Timers.lua + LibCandyBar-3.0): RXPFrame.BarContainer holds the
+-- active bars, keyed by label. Each bar is a Frame whose fill is a StatusBar
+-- (candyBarBar) over a background texture (candyBarBackground), and
+-- bar:SetTexture sets both, like the library. StartTimer paints OpenXP's own
+-- bar texture and map-pin blue, then SortTimers runs (OpenXPCard wraps it to
+-- dock the container under the card).
+HARNESS.OXP_BAR_TEXTURE = "Interface\\CHARACTERFRAME\\BarFill"
+local barContainer = CreateFrame("Frame", "RXPFrameBarContainer", rxpFrame)
+barContainer.bars = {}
+rxpFrame.BarContainer = barContainer
+local function newFakeBar(label)
+  local bar = CreateFrame("Frame", nil, UIParent)
+  bar.candyBarBar = CreateFrame("StatusBar", nil, bar)
+  bar.candyBarBackground = bar.candyBarBar:CreateTexture(nil, "BACKGROUND")
+  bar.candyBarLabel = bar.candyBarBar:CreateFontString(nil, "OVERLAY")
+  bar.candyBarDuration = bar.candyBarBar:CreateFontString(nil, "OVERLAY")
+  bar.label = label
+  bar.SetTexture = function(self, texture)
+    self.candyBarBar:SetStatusBarTexture(texture)
+    self.candyBarBackground:SetTexture(texture)
+  end
+  bar.SetColor = function(self, ...) self.candyBarBar:SetStatusBarColor(...) end
+  return bar
+end
+function addon:SortTimers() bump("SortTimers") end
+function addon.StartTimer(duration, label)
+  local bar = barContainer.bars[label] or newFakeBar(label)
+  barContainer.bars[label] = bar
+  bar:SetTexture(HARNESS.OXP_BAR_TEXTURE)
+  bar:SetColor(0.35, 0.72, 1, 1)
+  bar:Show()
+  addon:SortTimers()
+  return bar
+end
 addon.targeting = {
   activeTargetFrame = tf,
   -- OpenXP itself bails out of combat for target-frame rebuilds

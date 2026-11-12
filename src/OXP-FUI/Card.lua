@@ -342,6 +342,60 @@ local function insetXPStrip(xpStrip, bar, cardModule)
 end
 
 -- ---------------------------------------------------------------------------
+-- Conditional progress bars (flight and step timers)
+-- ---------------------------------------------------------------------------
+
+-- OpenXP's timer bars (LibCandyBar frames, docked under the card) are filled
+-- with the foreground texture of FlareUI's unit frame bars, "FlareUI Forever"
+-- (Blizzard's Forever art in grey, so the bar colour tints it). FlareUI
+-- hardcodes that texture today, so the path lives in this one function; when
+-- FlareUI lets its maintainer-configured texture be read, only it changes.
+-- Nil while FlareUI is not installed: the bars then keep OpenXP's own.
+local function flareBarTexture()
+  if not (GetAddOnMetadata and GetAddOnMetadata("FlareUI", "Version")) then
+    return nil
+  end
+  return "Interface\\AddOns\\FlareUI\\Media\\Bars\\FlareUI-Forever.tga"
+end
+
+-- Texture one bar: the fill and its background, exactly as LibCandyBar's own
+-- SetTexture does, with the fill's colour carried over. A bar already
+-- showing the texture is left alone (OpenXP repaints its own one on every
+-- StartTimer, so what the bar shows now is the only thing to go by).
+local function textureBar(bar, texture)
+  if type(bar) ~= "table" then return end
+  local fill = bar.candyBarBar
+  if not (fill and fill.SetStatusBarTexture and fill.GetStatusBarTexture
+      and fill.GetStatusBarColor and fill.SetStatusBarColor
+      and bar.candyBarBackground and bar.candyBarBackground.SetTexture) then
+    return
+  end
+  local current = fill:GetStatusBarTexture()
+  if current and current.GetTexture and current:GetTexture() == texture then return end
+  local r, g, b, a = fill:GetStatusBarColor()
+  fill:SetStatusBarTexture(texture)
+  bar.candyBarBackground:SetTexture(texture)
+  if r then fill:SetStatusBarColor(r, g, b, a) end
+end
+
+-- The active bars are RXPFrame.BarContainer.bars (label -> bar). OpenXP
+-- restarts a pooled bar through StartTimer, which paints its own texture
+-- again; the SortTimers hook (Engine) brings this skin back after it.
+local function skinTimerBars(ctx, openxp)
+  local texture = flareBarTexture()
+  if not texture then
+    ctx.Skip("card: timer bars keep OpenXP's texture (FlareUI not installed)")
+    return
+  end
+  local container = openxp and openxp.RXPFrame and openxp.RXPFrame.BarContainer
+  if type(container) ~= "table" or type(container.bars) ~= "table" then return end
+  for _, raw in pairs(container.bars) do
+    local bar = ctx.Guard(raw)
+    if bar then textureBar(bar, texture) end
+  end
+end
+
+-- ---------------------------------------------------------------------------
 -- Skin entry
 -- ---------------------------------------------------------------------------
 
@@ -382,6 +436,7 @@ local function Apply(ctx)
   end
   if mini then skinMini(ctx.Guard(mini)) end
   if list then skinStepList(ctx.Guard(list), openxp) end
+  skinTimerBars(ctx, openxp)
 
   -- Any region still carrying OpenXP's blue accent (the progress strip
   -- under the header, theme-colored art) becomes FlareUI amber.

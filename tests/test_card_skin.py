@@ -411,6 +411,88 @@ class HeaderBand(unittest.TestCase):
         self.assertGreaterEqual(env.run(f"return {divider}:GetNumPoints()"), 2)
 
 
+FLAREUI_BAR = "Interface\\AddOns\\FlareUI\\Media\\Bars\\FlareUI-Forever.tga"
+OXP_BAR = "Interface\\CHARACTERFRAME\\BarFill"
+PIN_BLUE = (0.35, 0.72, 1.0, 1.0)
+
+
+class ConditionalProgressBar(unittest.TestCase):
+    """OpenXP's conditional progress bars (flight and step timers, docked
+    under the card) get the foreground texture of FlareUI's unit frame bars,
+    "FlareUI Forever". FlareUI hardcodes that texture today; a future
+    configured texture would change only the one constant that names it."""
+
+    BAR = "HARNESS.openxp.RXPFrame.BarContainer.bars['Refuge Pointe, Arathi']"
+
+    def _env(self, **kw):
+        env = Env(**kw)
+        env.boot()
+        env.run("HARNESS.openxp.StartTimer(38, 'Refuge Pointe, Arathi')")
+        return env
+
+    def _textures(self, env):
+        fill = env.run(f"return {self.BAR}.candyBarBar:GetStatusBarTexture():GetTexture()")
+        bg = env.run(f"return {self.BAR}.candyBarBackground:GetTexture()")
+        return fill, bg
+
+    def test_new_bar_fill_and_background_use_the_flareui_texture(self):
+        env = self._env(flareui=True)
+        self.assertEqual(self._textures(env), (FLAREUI_BAR, FLAREUI_BAR))
+
+    def test_bar_keeps_openxps_colour_over_the_new_texture(self):
+        env = self._env(flareui=True)
+        self.assertEqual(env.run(
+            f"local r,g,b,a = {self.BAR}.candyBarBar:GetStatusBarColor(); return r,g,b,a"),
+            PIN_BLUE)
+        self.assertEqual(env.run(
+            f"local r,g,b,a = {self.BAR}.candyBarBar:GetStatusBarTexture():GetVertexColor(); "
+            "return r,g,b,a"), PIN_BLUE)
+
+    def test_bar_started_again_is_re_textured(self):
+        env = self._env(flareui=True)
+        env.run("HARNESS.openxp.StartTimer(40, 'Refuge Pointe, Arathi')")
+        self.assertEqual(self._textures(env), (FLAREUI_BAR, FLAREUI_BAR))
+
+    def test_reapply_is_idempotent(self):
+        env = self._env(flareui=True)
+        env.run("OXPFUI.Reapply('test')")
+        env.run("OXPFUI.Reapply('test')")
+        self.assertEqual(self._textures(env), (FLAREUI_BAR, FLAREUI_BAR))
+        self.assertEqual(env.run(
+            f"local n = 0; for _, c in ipairs({self.BAR}.candyBarBar.__calls) do "
+            "if c[1] == 'SetStatusBarTexture' then n = n + 1 end end; return n"), 2)
+
+    def test_without_flareui_the_bar_stays_openxps(self):
+        env = self._env()
+        self.assertEqual(self._textures(env), (OXP_BAR, OXP_BAR))
+
+    def test_card_window_switch_off_leaves_the_bar_openxps(self):
+        env = self._env(flareui=True, db={"windows": {"card": False}})
+        self.assertEqual(self._textures(env), (OXP_BAR, OXP_BAR))
+
+    def test_master_switch_off_leaves_the_bar_openxps(self):
+        env = self._env(flareui=True, db={"enabled": False})
+        self.assertEqual(self._textures(env), (OXP_BAR, OXP_BAR))
+
+    def test_bar_is_never_moved_or_resized(self):
+        env = self._env(flareui=True)
+        env.run("OXPFUI.Reapply('test')")
+        self.assertEqual(env.run(
+            f"local n = 0; for _, c in ipairs({self.BAR}.__calls) do "
+            "if c[1] == 'SetPoint' or c[1] == 'SetWidth' or c[1] == 'SetHeight' "
+            "or c[1] == 'SetSize' then n = n + 1 end end; return n"), 0)
+
+    def test_missing_timer_parts_are_skipped_quietly(self):
+        env = Env(flareui=True)
+        env.boot()
+        env.run("HARNESS.openxp.RXPFrame.BarContainer = nil")
+        env.run("OXPFUI.Reapply('test')")
+        env.run("HARNESS.openxp.RXPFrame.BarContainer = { bars = { x = {} } }")
+        env.run("OXPFUI.Reapply('test')")
+        report = env.run("return OXPFUI.DebugReport()")
+        self.assertIn("Errors: none", report)
+
+
 class CardSwitches(unittest.TestCase):
     """Story 24/25: the master switch and the card's per-window switch."""
 
