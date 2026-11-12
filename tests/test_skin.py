@@ -528,6 +528,61 @@ class SettingsPanel(unittest.TestCase):
         self.assertEqual(env.run(
             "local x,y = OXPFUIPanel.title:GetShadowOffset(); return x,y"), (1, -1))
 
+    def test_panel_labels_get_their_font_before_their_text(self):
+        # Regression (in-game "FontString:SetText(): Font not set"): the
+        # client raises if SetText runs on a font string that has no font
+        # yet. The panel built its labels text-first, so the build died at
+        # the title — a blank panel with no close button, and because the
+        # build never returned, a new empty frame per /oxpfui.
+        env = Env()
+        env.boot()
+        env.slash("/oxpfui")
+        bad, total = env.run("""
+          local bad, n = {}, 0
+          for _, fs in ipairs({OXPFUIPanel:GetRegions()}) do
+            if fs:GetObjectType() == 'FontString' then
+              n = n + 1
+              local firstText, firstFont
+              for i, c in ipairs(fs.__calls) do
+                if c[1] == 'SetText' and not firstText then firstText = i end
+                if (c[1] == 'SetFont' or c[1] == 'SetFontObject')
+                   and not firstFont then firstFont = i end
+              end
+              if firstText and (not firstFont or firstFont > firstText) then
+                bad[#bad + 1] = tostring(fs:GetName() or 'unnamed')
+              end
+            end
+          end
+          return table.concat(bad, ','), n
+        """)
+        self.assertEqual(bad, "")
+        self.assertGreater(total, 0)
+
+    def test_panel_is_closable_with_escape(self):
+        # The panel registers in UISpecialFrames, so Escape dismisses it
+        # even if its own close button were never reached.
+        env = Env()
+        env.boot()
+        env.slash("/oxpfui")
+        self.assertTrue(env.run("""
+          for _, n in ipairs(UISpecialFrames) do
+            if n == 'OXPFUIPanel' then return true end
+          end
+          return false
+        """))
+
+    def test_repeated_slash_reuses_the_one_panel(self):
+        # /oxpfui must show the same cached panel every time, never build a
+        # second one (the harness also rejects a duplicate "OXPFUIPanel"
+        # global name loudly).
+        env = Env()
+        env.boot()
+        env.slash("/oxpfui")
+        env.run("OXPFUI_FIRST = OXPFUIPanel; OXPFUIPanel:Hide()")
+        env.slash("/oxpfui")
+        self.assertTrue(env.run("return OXPFUIPanel == OXPFUI_FIRST"))
+        self.assertEqual(env.run("return OXPFUIPanel:IsShown()"), True)
+
     def test_panel_has_switch_for_every_window(self):
         env = Env()
         env.boot()

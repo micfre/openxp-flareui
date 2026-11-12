@@ -229,9 +229,16 @@ local function newFrame(frameType, name, parent, template)
       if template2 then tex.template = template2 end
       return tex
     end
-    f.CreateFontString = function(self, name2, layer, _, template2)
+    f.CreateFontString = function(self, name2, layer, fontName, template2)
       local fs = newObject("FontString", "FontString", name2, self)
       fs.__layer = layer
+      -- Real client: an inherited font object name (third argument) or font
+      -- template (fourth argument) gives the font string its font.
+      if type(fontName) == "string" and fontName ~= "" then
+        fs.__fontObject = fontName
+      elseif type(template2) == "string" and template2 ~= "" then
+        fs.__fontObject = template2
+      end
       if template2 then fs.template = template2 end
       return fs
     end
@@ -347,7 +354,17 @@ local texExtra = {
   SetTexelSnappingBias = function(self, v) record(self, "SetTexelSnappingBias", v) end,
 }
 local fsExtra = {
-  SetText = function(self, text) record(self, "SetText", text); self.__text = text end,
+  -- Real-client contract, enforced: SetText on a font string that has no
+  -- font (neither SetFont/SetFontObject nor an inherited font object) raises
+  -- "FontString:SetText(): Font not set" — the bug class this harness once
+  -- missed, where a skin sets text before applying its typography.
+  SetText = function(self, text)
+    if self.__font == nil and self.__fontObject == nil then
+      error("FontString:SetText(): Font not set", 2)
+    end
+    record(self, "SetText", text)
+    self.__text = text
+  end,
   GetText = function(self) return self.__text end,
   SetTextColor = function(self, r, g, b, a)
     record(self, "SetTextColor", r, g, b, a)
@@ -367,7 +384,11 @@ local fsExtra = {
     if not f then return nil end
     return f[1], f[2], f[3]
   end,
-  SetFontObject = function(self, obj) record(self, "SetFontObject", obj) end,
+  SetFontObject = function(self, obj)
+    record(self, "SetFontObject", obj)
+    self.__fontObject = obj
+  end,
+  GetFontObject = function(self) return self.__fontObject end,
   SetShadowColor = function(self, r, g, b, a)
     record(self, "SetShadowColor", r, g, b, a)
     self.__shadowColor = { r, g, b, a }
@@ -551,13 +572,15 @@ ItemRefTooltip = CreateFrame("Frame", "ItemRefTooltip", UIParent)
 -- line font strings (<name>TextLeft<N> / <name>TextRight<N>) on demand, like
 -- the client does; NumLines counts lines; ClearLines drops them (the client
 -- clears the tooltip before each new unit/item). GetUnit/GetItem read the
--- HARNESS state the tests set.
+-- HARNESS state the tests set. Lines inherit the tooltip's font object, like
+-- the real client's template does (so SetText is font-legal).
 local function enableTooltip(tt)
   tt.__lines = 0
   tt.AddLine = function(self, text, r, g, b, a)
     record(self, "AddLine", text)
     self.__lines = self.__lines + 1
-    local fs = self:CreateFontString(self:GetName() .. "TextLeft" .. self.__lines, "OVERLAY")
+    local fs = self:CreateFontString(self:GetName() .. "TextLeft" .. self.__lines,
+                                     "OVERLAY", "GameTooltipText")
     fs:SetText(text)
     if r then fs:SetTextColor(r, g, b, a) end
     return self
@@ -566,10 +589,12 @@ local function enableTooltip(tt)
     record(self, "AddDoubleLine", left, right)
     self.__lines = self.__lines + 1
     local i = self.__lines
-    local fl = self:CreateFontString(self:GetName() .. "TextLeft" .. i, "OVERLAY")
+    local fl = self:CreateFontString(self:GetName() .. "TextLeft" .. i,
+                                     "OVERLAY", "GameTooltipText")
     fl:SetText(left)
     if rL then fl:SetTextColor(rL, gL, bL, aL) end
-    local fr = self:CreateFontString(self:GetName() .. "TextRight" .. i, "OVERLAY")
+    local fr = self:CreateFontString(self:GetName() .. "TextRight" .. i,
+                                     "OVERLAY", "GameTooltipText")
     fr:SetText(right)
     if rR then fr:SetTextColor(rR, gR, bR, aR) end
     return self

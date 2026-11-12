@@ -49,8 +49,10 @@ end
 
 local function label(parent, text, kind, colorName)
   local fs = parent:CreateFontString(nil, "OVERLAY")
-  fs:SetText(text)
+  -- Font before text: a fresh font string has no font, and the client
+  -- raises "FontString:SetText(): Font not set" if SetText runs first.
   theme.ApplyText(fs, kind or "body", colorName or "OBJECTIVE")
+  fs:SetText(text)
   return fs
 end
 
@@ -83,16 +85,18 @@ local function buildPanel()
   f:EnableMouse(true)
   theme.ApplyBackdrop(f)
 
-  -- Header ---------------------------------------------------------------
-  f.title = f:CreateFontString(nil, "OVERLAY")
-  f.title:SetPoint("TOPLEFT", f, "TOPLEFT", 10, -8)
-  f.title:SetText(L.panelTitle)
-  theme.ApplyText(f.title, "header", "TITLE")
+  -- Hidden until the build completes (OpenPanel shows it): a mid-build
+  -- error must never leave a shown, empty, closeless panel on screen.
+  -- Escape closes the panel too, via the client's UISpecialFrames list.
+  f:Hide()
+  tinsert(UISpecialFrames, f:GetName())
 
-  f.subtitle = f:CreateFontString(nil, "OVERLAY")
+  -- Header ---------------------------------------------------------------
+  f.title = label(f, L.panelTitle, "header", "TITLE")
+  f.title:SetPoint("TOPLEFT", f, "TOPLEFT", 10, -8)
+
+  f.subtitle = label(f, L.panelSubtitle, "body", "ZONE")
   f.subtitle:SetPoint("TOPLEFT", f.title, "BOTTOMLEFT", 0, -2)
-  f.subtitle:SetText(L.panelSubtitle)
-  theme.ApplyText(f.subtitle, "body", "ZONE")
 
   f.closeBtn = CreateFrame("Button", nil, f)
   f.closeBtn:SetSize(12, 12)
@@ -100,19 +104,16 @@ local function buildPanel()
   f.closeBtn.tex = f.closeBtn:CreateTexture(nil, "OVERLAY")
   f.closeBtn.tex:SetAllPoints(f.closeBtn)
   f.closeBtn.tex:SetColorTexture(theme.C.BOX[1], theme.C.BOX[2], theme.C.BOX[3], 1)
-  f.closeBtn.mark = f.closeBtn:CreateFontString(nil, "OVERLAY")
+  f.closeBtn.mark = label(f.closeBtn, "×")
   f.closeBtn.mark:SetAllPoints(f.closeBtn)
-  f.closeBtn.mark:SetText("×")
-  theme.ApplyText(f.closeBtn.mark, "body", "OBJECTIVE")
   f.closeBtn:SetScript("OnClick", function() f:Hide() end)
 
   -- Version note (only when installed != tested OpenXP) --------------------
   local mismatch = OXPFUI.VersionMismatch()
   if mismatch then
-    f.versionNote = f:CreateFontString(nil, "OVERLAY")
+    f.versionNote = label(f, L.versionNote:format(mismatch, OXPFUI.testedOpenXP),
+                          "body", "URGENT")
     f.versionNote:SetPoint("TOPLEFT", f.subtitle, "BOTTOMLEFT", 0, -4)
-    f.versionNote:SetText(L.versionNote:format(mismatch, OXPFUI.testedOpenXP))
-    theme.ApplyText(f.versionNote, "body", "URGENT")
   end
 
   -- Master switch ---------------------------------------------------------
@@ -207,12 +208,9 @@ local function buildPanel()
   end)
 
   -- Reload note --------------------------------------------------------------
-  f.reloadNote = f:CreateFontString(nil, "OVERLAY")
+  f.reloadNote = label(f, L.reloadNote, "body", "DIM")
   f.reloadNote:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 10, 10)
-  f.reloadNote:SetText(L.reloadNote)
-  theme.ApplyText(f.reloadNote, "body", "DIM")
 
-  f:Hide()
   return f
 end
 

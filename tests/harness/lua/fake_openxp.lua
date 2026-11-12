@@ -92,7 +92,7 @@ local function MakePill(parent)
   pill.l:SetTexture(WHITE)
   pill.r = pill:CreateTexture(nil, "BACKGROUND")
   pill.r:SetTexture(WHITE)
-  pill.text = pill:CreateFontString(nil, "OVERLAY")
+  pill.text = pill:CreateFontString(nil, "OVERLAY", "GameFontNormal")
   function pill:SetStatus(status)
     local st = status and STATUS[status]
     if not st then self:Hide(); self.status = nil; return end
@@ -252,15 +252,15 @@ function card.BuildStepList()
   list = CreateFrame("Frame", nil, card, "BackdropTemplate")
   list.offset = 0
   list.count = 0
-  list.title = list:CreateFontString(nil, "OVERLAY")
+  list.title = list:CreateFontString(nil, "OVERLAY", "GameFontNormal")
   list.close = MakeBarButton(list)
   list.rows = {}
   for r = 1, LIST_ROWS do
     local row = CreateFrame("Button", nil, list)
     row.hl = row:CreateTexture(nil, "BACKGROUND")
-    row.num = row:CreateFontString(nil, "OVERLAY")
+    row.num = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     row.pill = MakePill(row)
-    row.text = row:CreateFontString(nil, "OVERLAY")
+    row.text = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     list.rows[r] = row
   end
   list:SetHeight(28 + LIST_ROWS * 18 + 8)
@@ -546,9 +546,10 @@ splitsTitle.splitsMenuFrame =
 local function aceLabel(parent)
   -- AceGUI-3.0 Label: widget table with .frame and the .label font string
   -- (SetFont on the widget re-fonts the font string, AceGUIWidget-Label).
+  -- The label inherits GameFontHighlight like the real widget's template.
   local w = {}
   w.frame = CreateFrame("Frame", nil, parent)
-  w.label = w.frame:CreateFontString(nil, "OVERLAY")
+  w.label = w.frame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
   w.SetFont = function(_, font, size, flags) w.label:SetFont(font, size, flags) end
   w.SetText = function(_, text) w.label:SetText(text) end
   return w
