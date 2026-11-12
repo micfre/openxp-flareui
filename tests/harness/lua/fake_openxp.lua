@@ -169,6 +169,23 @@ upNext.label = upNext:CreateFontString(nil, "OVERLAY")
 upNext.text = upNext:CreateFontString(nil, "OVERLAY")
 upNext.lines = { upNext.text }
 
+-- OpenXPCard.lua's "Up next" layout: the label in a -2 font, the line hung
+-- off the label's right edge, and its width = card width - 2 * PAD - label
+-- width (OpenXP's own font) - 10. Run on every refresh, before skins.
+HARNESS.UP_NEXT = { cardWidth = 300, pad = 14, text = "Talk to Lieutenant Farren Orin" }
+function HARNESS.LayoutUpNext()
+  local u = HARNESS.UP_NEXT
+  upNext.label:SetFont("Fonts\\ARIALN.TTF", 10, "OUTLINE")
+  upNext.label:SetText("UP NEXT")
+  upNext.label:ClearAllPoints()
+  upNext.label:SetPoint("TOPLEFT", u.pad, -10)
+  upNext.text:ClearAllPoints()
+  upNext.text:SetPoint("TOPLEFT", upNext.label, "TOPRIGHT", 8, 1)
+  upNext.text:SetWidth(u.cardWidth - u.pad * 2 - upNext.label:GetStringWidth() - 10)
+  upNext.text:SetText(u.text)
+  upNext.text:Show()
+end
+
 -- Bottom button bar + XP strip + collapsed mini card.
 local bar = CreateFrame("Frame", nil, card)
 bar.bg = bar:CreateTexture(nil, "BACKGROUND")
@@ -1007,6 +1024,7 @@ local function applyCardOpenXPLook()
   oxpFont(cur.lines[2].text, CARD_C.faint)
   oxpFont(upNext.label, CARD_C.dim)
   for _, line in ipairs(upNext.lines) do oxpFont(line, CARD_C.dim) end
+  HARNESS.LayoutUpNext()
   for _, btn in ipairs({ bar.prev, bar.next, bar.menu, bar.settings, bar.collapse }) do
     btn.bg:SetVertexColor(1, 1, 1, 0)
     oxpTint(btn.icon, { 0.87, 0.88, 0.92 })

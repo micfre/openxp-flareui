@@ -453,6 +453,41 @@ class CardSwitches(unittest.TestCase):
         self.assertEqual(env.run("return OpenXPCard.backdrop.edgeFile"), FLARE_THICK)
 
 
+class UpNextLineEnding(unittest.TestCase):
+    """The "..." cut of an Up next line stays inside the card's right
+    padding: the skin's wider label must narrow the lines it pushes right."""
+
+    RIGHT_EDGE = "return HARNESS.UP_NEXT.cardWidth - HARNESS.UP_NEXT.pad - 2"
+    LINE_RIGHT = (
+        "local u = HARNESS.cardBits.upNext; local _, _, _, dx = u.text:GetPoint(1); "
+        "return HARNESS.UP_NEXT.pad + u.label:GetStringWidth() + dx + u.text:GetWidth()")
+
+    def test_line_right_edge_matches_openxps_with_the_flareui_label(self):
+        for font in ("Friz Quadrata", "Barlow Condensed"):
+            with self.subTest(font=font):
+                env = Env(db={"font": font})
+                env.boot()
+                env.run("HARNESS.openxp.card.Refresh(nil, true)")
+                self.assertEqual(env.run(self.LINE_RIGHT), env.run(self.RIGHT_EDGE))
+
+    def test_reapply_does_not_narrow_the_line_again(self):
+        env = Env()
+        env.boot()
+        env.run("HARNESS.openxp.card.Refresh(nil, true)")
+        width = env.run("return HARNESS.cardBits.upNext.text:GetWidth()")
+        env.run("OXPFUI.Reapply('test')")
+        env.run("OXPFUI.Reapply('test')")
+        self.assertEqual(env.run("return HARNESS.cardBits.upNext.text:GetWidth()"), width)
+
+    def test_font_change_keeps_the_right_edge(self):
+        env = Env()
+        env.boot()
+        env.run("HARNESS.openxp.card.Refresh(nil, true)")
+        env.run("OXPFUI.db.font = 'Barlow Condensed'")
+        env.run("OXPFUI.Reapply('test')")
+        self.assertEqual(env.run(self.LINE_RIGHT), env.run(self.RIGHT_EDGE))
+
+
 class CardNeverMovesAnything(unittest.TestCase):
     """Story 29: no OpenXP frame is ever moved or resized by the skin."""
 

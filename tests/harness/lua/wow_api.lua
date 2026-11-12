@@ -366,6 +366,12 @@ local fsExtra = {
     self.__text = text
   end,
   GetText = function(self) return self.__text end,
+  -- Unwrapped text width: a crude monospace model (half the font size per
+  -- character) is enough for tests that compare widths across fonts.
+  GetStringWidth = function(self)
+    local size = self.__font and self.__font[2] or 12
+    return #(tostring(self.__text or "")) * size * 0.5
+  end,
   SetTextColor = function(self, r, g, b, a)
     record(self, "SetTextColor", r, g, b, a)
     self.__textColor = { r, g, b, a or 1 }

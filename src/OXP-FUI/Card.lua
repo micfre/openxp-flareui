@@ -166,10 +166,28 @@ local function skinBlocks(blocks)
   end
 end
 
+-- OpenXP sizes every "Up next" line to the card width minus the "UP NEXT"
+-- label measured in OpenXP's own font, then the lines hang off the label's
+-- right edge. The FlareUI label font is wider, so the lines would start
+-- further right but keep the old width and run past the card's right
+-- padding (the client's "..." cut included). Each shown line is narrowed by
+-- exactly the amount the label grew, which restores OpenXP's right edge;
+-- the client then places the "..." inside that width. This is the second
+-- place the card skin lays anything out (see BAR_INSET); only the lines'
+-- own widths change, and a re-apply with an unchanged label changes nothing.
 local function skinUpNext(upNext)
+  local label = theme.RealFrame(upNext.label)
+  local before = label and label.GetStringWidth and label:GetStringWidth() or nil
   theme.ApplyText(upNext.label, "title", "ZONE")
+  local after = label and label.GetStringWidth and label:GetStringWidth() or nil
+  local delta = (before and after) and (after - before) or 0
   for _, line in ipairs(upNext.lines or {}) do
     theme.ApplyText(line, "body", "OBJECTIVE")
+    local rl = theme.RealFrame(line)
+    if delta ~= 0 and rl and rl.IsShown and rl:IsShown() and rl.GetWidth and rl.SetWidth then
+      local w = rl:GetWidth()
+      if type(w) == "number" and w > 0 then rl:SetWidth(math.max(1, w - delta)) end
+    end
   end
 end
 
